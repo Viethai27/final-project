@@ -1,0 +1,21 @@
+﻿
+FullName                                                                                               
+--------                                                                                               
+D:\4.2\Final Project\final project\doctor-route-usage.txt                                              
+D:\4.2\Final Project\final project\index.html                                                          
+D:\4.2\Final Project\final project\reception-route-sidebar-usage.txt                                   
+D:\4.2\Final Project\final project\.tmp_project2_old\index.html                                        
+D:\4.2\Final Project\final project\.tmp_project2_old\src\App.jsx                                       
+D:\4.2\Final Project\final project\.tmp_project2_old\src\main.jsx                                      
+D:\4.2\Final Project\final project\.tmp_project2_old\src\components\customer\homecontent\Services.jsx  
+D:\4.2\Final Project\final project\.tmp_project2_old\src\pages\customer\Appointment.jsx                
+D:\4.2\Final Project\final project\.tmp_project2_old\src\pages\receptionist\AppointmentRegistration.jsx
+D:\4.2\Final Project\final project\src\App.tsx                                                         
+D:\4.2\Final Project\final project\src\index.css                                                       
+D:\4.2\Final Project\final project\src\main.tsx                                                        
+D:\4.2\Final Project\final project\src\components\customer\appointmentcontent\AppointmentDetailForm.tsx
+D:\4.2\Final Project\final project\src\components\customer\homecontent\Services.tsx                    
+D:\4.2\Final Project\final project\src\pages\customer\Appointment.tsx                                  
+D:\4.2\Final Project\final project\src\types\index.ts                                                  
+
+

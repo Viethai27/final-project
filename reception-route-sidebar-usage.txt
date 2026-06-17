@@ -1,0 +1,106 @@
+﻿D:\4.2\Final Project\final project\src\context\AuthContext.tsx:35:       RECEPTIONIST: 'u2',
+D:\4.2\Final Project\final project\src\pages\DashboardPage.tsx:65:                     <Area type="monotone" dataKey="check_in" name="Check-in" stroke="#0ea5e9" fill="url(#colorCheckin)" strokeWidth={2} />
+D:\4.2\Final Project\final project\src\pages\DashboardPage.tsx:104:                 <h3 className="text-sm font-semibold text-gray-800">Bệnh Nhân Đang Hoạt Động ({activeVisits.length})</h3>
+D:\4.2\Final Project\final project\src\pages\DashboardPage.tsx:111:                       <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Bệnh Nhân</th>
+D:\4.2\Final Project\final project\src\pages\DashboardPage.tsx:113:                       <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Check-in</th>
+D:\4.2\Final Project\final project\src\pages\DispatchPage.tsx:23:     <Layout pageTitle="Điều Phối Bệnh Nhân">
+D:\4.2\Final Project\final project\src\pages\DispatchPage.tsx:27:           <h3 className="text-sm font-semibold text-gray-700">Bệnh Nhân Cần Điều Phối ({dispatchableVisits.length})</h3>
+D:\4.2\Final Project\final project\src\pages\DispatchPage.tsx:61:                 Không có bệnh nhân cần điều phối
+D:\4.2\Final Project\final project\src\pages\DispatchPage.tsx:85:               <p className="text-sm">Chọn bệnh nhân để điều phối</p>
+D:\4.2\Final Project\final project\src\pages\LoginPage.tsx:9:   { role: 'RECEPTIONIST', label: 'Lễ Tân', desc: 'Tiếp nhận BN', color: 'from-blue-500 to-blue-700' },
+D:\4.2\Final Project\final project\src\pages\LoginPage.tsx:18:   RECEPTIONIST: '/reception',
+D:\4.2\Final Project\final project\src\pages\LoginPage.tsx:73:             <h2 className="text-2xl font-bold leading-tight">Hệ Thống Điều Phối<br />Bệnh Nhân Ngoại Trú</h2>
+D:\4.2\Final Project\final project\src\pages\LoginPage.tsx:75:               Quản lý luồng bệnh nhân thông minh: từ tiếp nhận, khám lâm sàng, cận lâm sàng đến thanh toán. 
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:139:             Bệnh nhân có ràng buộc quay lại đúng bác sĩ. Xác nhận thủ công khi chuyển phòng.
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:336:   CALL_PATIENT: 'Gọi bệnh nhân',
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:342:   CANCEL_VISIT: 'Hủy lượt khám',
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:488:     <Layout pageTitle="Điều Dưỡng / Điều Phối Hàng Đợi">
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:515:             { key: 'queue' as const, label: 'Hàng Đợi' },
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:584:                   <p className="text-sm">Không có bệnh nhân phù hợp bộ lọc</p>
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:620:                   <p className="text-sm">Chọn bệnh nhân để xem chi tiết</p>
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:680:                         <Phone size={15} /> Gọi Bệnh Nhân
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:704:                         <XCircle size={15} /> Hủy Lượt Khám
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:771:       <Modal open={!!transferTarget} onClose={() => setTransferTarget(null)} title="Chuyển Phòng Bệnh Nhân" size="md">
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:781:         message={`Bắt đầu phục vụ cho bệnh nhân ${confirmAction?.item.patientName}?`}
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:790:         message={`Bệnh nhân ${confirmAction?.item.patientName} không có mặt? Sẽ đưa xuống cuối hàng đợi.`}
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:798:         title="Xác nhận hủy lượt khám"
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:799:         message={`Hủy lượt khám của bệnh nhân ${confirmAction?.item.patientName}?`}
+D:\4.2\Final Project\final project\src\pages\QueuePage.tsx:800:         confirmLabel="Hủy Lượt Khám"
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:20: type ReceptionStatus =
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:21:   | 'Chờ tiếp nhận'
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:22:   | 'Đã tiếp nhận'
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:32: interface ReceptionPatient {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:41:   status: ReceptionStatus;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:57: const STATUS_FILTERS = ['Chờ tiếp nhận', 'Đã tiếp nhận', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Hoàn tất'] as const;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:59: const PATIENTS: ReceptionPatient[] = [
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:60:   { stt: '001', code: 'BN001', name: 'Nguyễn Thị Lan', phone: '0987654321', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ tiếp nhận', priority: true, waitTime: '04 phút', expectedWait: '10 phút', address: 'Quận 3, TP.HCM', note: 'Đã đặt lịch trước, thai 28 tuần, cần xác minh thông tin BHYT.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:61:   { stt: '002', code: 'BN002', name: 'Trần Minh Anh', phone: '0912345678', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Đã tiếp nhận', waitTime: '08 phút', expectedWait: '18 phút', address: 'Quận 7, TP.HCM', note: 'Đã tạo hồ sơ và cần cấp số thứ tự.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:65:   { stt: '006', code: 'BN006', name: 'Đặng Ngọc Anh', phone: '0977889900', registrationType: 'Đến trực tiếp', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Hoàn tất', waitTime: '00 phút', expectedWait: '00 phút', address: 'Gò Vấp, TP.HCM', note: 'Đã hoàn tất luồng tiếp nhận trong ngày.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:66:   { stt: '007', code: 'BN007', name: 'Vũ Thanh Hương', phone: '0909988776', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Đang khám', priority: true, waitTime: '16 phút', expectedWait: '05 phút', address: 'Tân Bình, TP.HCM', note: 'Bệnh nhân ưu tiên, đã vào phòng khám.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:67:   { stt: '008', code: 'BN008', name: 'Bùi Khánh Linh', phone: '0911223344', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Mai Thanh Tú', room: 'Phòng 205', status: 'Chờ kết quả', waitTime: '43 phút', expectedWait: '15 phút', address: 'Phú Nhuận, TP.HCM', note: 'Theo dõi trạng thái để hướng dẫn bệnh nhân quay lại phòng khám.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:78: const STATUS_STYLES: Record<ReceptionStatus, string> = {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:79:   'Chờ tiếp nhận': 'bg-blue-100 text-blue-700 border-blue-200',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:80:   'Đã tiếp nhận': 'bg-sky-100 text-sky-700 border-sky-200',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:91: const ACTIONS_BY_STATUS: Record<ReceptionStatus, string[]> = {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:92:   'Chờ tiếp nhận': ['Tiếp nhận', 'Xác nhận lịch hẹn'],
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:93:   'Đã tiếp nhận': ['Tạo phiếu khám', 'Cấp số thứ tự'],
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:104: function StatusBadge({ status }: { status: ReceptionStatus }) {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:127: export default function ReceptionPage() {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:129:   const activeView = searchParams.get('view') ?? 'reception';
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:158:   const newArrival = PATIENTS.find(patient => patient.status === 'Chờ tiếp nhận');
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:163:     { label: 'Bệnh nhân đã tiếp nhận hôm nay', value: 42, icon: UserCheck, accent: 'bg-sky-50 text-sky-700 border-sky-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:165:     { label: 'Bệnh nhân đang chờ khám', value: PATIENTS.filter(p => p.status === 'Chờ khám').length, icon: Users, accent: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:166:     { label: 'Bệnh nhân cần điều phối', value: PATIENTS.filter(p => ['Chờ CLS', 'Chờ khám'].includes(p.status)).length, icon: ArrowRightLeft, accent: 'bg-purple-50 text-purple-700 border-purple-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:170:   const timeline = ['Tiếp nhận', 'Tạo phiếu khám', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Chờ kết quả', 'Chờ kết luận', 'Hoàn tất'];
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:173:     (selectedPatient.status === 'Chờ tiếp nhận' && step === 'Tiếp nhận') ||
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:174:     (selectedPatient.status === 'Đã tiếp nhận' && step === 'Tạo phiếu khám') ||
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:178:   const showStats = activeView === 'reception' || activeView === 'overview';
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:179:   const showAlerts = ['reception', 'overview', 'appointments', 'notifications'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:180:   const showPatientTable = ['reception', 'appointments', 'patients'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:181:   const showSchedule = ['reception', 'overview', 'doctors'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:182:   const showDetailPanel = ['reception', 'appointments', 'patients', 'notifications', 'account'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:184:     reception: 'Tiếp nhận bệnh nhân',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:185:     overview: 'Tổng quan lễ tân',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:187:     patients: 'Danh sách bệnh nhân',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:191:   }[activeView] ?? 'Tiếp nhận bệnh nhân';
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:199:               <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Quầy lễ tân hôm nay</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:200:               <h1 className="mt-1 text-2xl font-bold text-gray-900">Bảng điều khiển lễ tân</h1>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:201:               <p className="mt-1 text-sm text-gray-500">Tiếp nhận, đăng ký khám và theo dõi luồng bệnh nhân trong ngày</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:217:                     Tiếp nhận bệnh nhân
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:278:                   { label: 'Bệnh nhân mới đến', patient: newArrival, icon: Bell },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:306:                     <p className="text-sm text-gray-600">Tập trung xử lý bệnh nhân đặt lịch trước, tạo phiếu khám và cấp số thứ tự.</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:309:                     <button className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700">Tiếp nhận mới</button>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:320:                   <h2 className="text-base font-bold text-gray-900">{activeView === 'patients' ? 'Danh sách bệnh nhân' : 'Danh sách tiếp nhận và hàng đợi'}</h2>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:321:                   <p className="text-sm text-gray-500">Theo dõi bệnh nhân mới đến, lịch hẹn và trạng thái điều phối</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:334:                       <th className="px-4 py-3">Mã bệnh nhân</th>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:403:                   <p className="text-sm text-gray-500">Dùng để phân bổ và điều phối bệnh nhân theo phòng khám</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:449:                       {schedule.waiting} bệnh nhân chờ
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:462:                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{activeView === 'account' ? 'Tài khoản lễ tân' : 'Chi tiết bệnh nhân'}</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:506:               <p className="mb-3 text-xs font-semibold uppercase text-gray-500">Timeline luồng bệnh nhân</p>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:520:               <p className="text-xs font-semibold uppercase text-gray-500">Ghi chú lễ tân</p>
+D:\4.2\Final Project\final project\src\pages\ReportsPage.tsx:50:     { label: 'Tổng lượt khám', value: visits.length, sub: 'Hôm nay', color: 'text-sky-600' },
+D:\4.2\Final Project\final project\src\pages\ReportsPage.tsx:111:                 <h3 className="text-sm font-semibold text-gray-700 mb-4">Luồng Bệnh Nhân Theo Giờ</h3>
+D:\4.2\Final Project\final project\src\pages\ReportsPage.tsx:119:                     <Line type="monotone" dataKey="check_in" name="Check-in" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:144:               <Badge colorScheme="blue" mb={3} px={3} py={1} borderRadius="full">Dành cho bệnh nhân</Badge>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:147:                 Nhập một trong các thông tin cá nhân hoặc mã lượt khám để xem lại danh sách các lần khám đã thực hiện.
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:160:               <Text fontWeight="600" color="gray.800">SĐT, CCCD/CMND, mã bệnh nhân, mã lượt khám</Text>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:180:                     <Text fontSize="sm" fontWeight="600" mb={2}>Mã bệnh nhân</Text>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:184:                     <Text fontSize="sm" fontWeight="600" mb={2}>Mã lượt khám</Text>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:228:                       Tìm thấy {matchedVisits.length} lượt khám thuộc {matchedPatients.length} bệnh nhân.
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:271:                                 <Text fontSize="xs" color="gray.400">Mã bệnh nhân</Text>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:291:             Chi tiết lượt khám
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:300:                         <Heading size="sm" color="gray.800">Thông tin bệnh nhân</Heading>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:321:                         <Heading size="sm" color="gray.800">Thông tin lượt khám</Heading>
+D:\4.2\Final Project\final project\src\pages\VisitTrackingPage.tsx:323:                           <Box><Text fontSize="xs" color="gray.400">Mã lượt khám</Text><Text fontSize="sm" fontWeight="600">{selectedVisit.ticketNumber}</Text></Box>
+D:\4.2\Final Project\final project\src\data\mockData.ts:10:   { id: 'u2', name: 'Trần Thị Lễ Tân', username: 'letan', role: 'RECEPTIONIST', department: 'Tiếp Nhận' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:195:   { id: 'sh1', visitId: 'v1', toStatus: 'WAITING_EXAM', timestamp: '07:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:197:   { id: 'sh3', visitId: 'v2', toStatus: 'WAITING_EXAM', timestamp: '07:30:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:200:   { id: 'sh6', visitId: 'v16', toStatus: 'WAITING_EXAM', timestamp: '07:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:203:   { id: 'sh9', visitId: 'v16', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '08:15:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:204:   { id: 'sh10', visitId: 'v9', toStatus: 'WAITING_EXAM', timestamp: '07:50:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:207:   { id: 'sh13', visitId: 'v22', toStatus: 'WAITING_EXAM', timestamp: '08:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:210:   { id: 'sh16', visitId: 'v22', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '09:05:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:211:   { id: 'sh17', visitId: 'v23', toStatus: 'WAITING_EXAM', timestamp: '08:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:220:   { id: 'dh4', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', fromRoomId: undefined, toRoomId: 'r5', toRoomName: 'Phòng Khám 201', followedSuggestion: true, reason: 'BN đặt lịch khám TMH', dispatchedBy: 'u2', dispatchedByName: 'Trần Thị Lễ Tân', dispatchedAt: '07:50:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:292:   { id: 'al5', actionType: 'DISMISS_REALLOCATION', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', reason: 'Bệnh nhân không đồng ý chuyển phòng', createdAt: '08:35:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+D:\4.2\Final Project\final project\src\types\index.ts:2: export type UserRole = 'ADMIN' | 'RECEPTIONIST' | 'COORDINATOR' | 'DOCTOR' | 'LAB_STAFF' | 'MANAGER';

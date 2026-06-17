@@ -1,551 +1,1327 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { clsx } from 'clsx';
 import {
-  ArrowRightLeft,
-  Bell,
-  CalendarCheck,
+  CalendarDays,
+  CheckCircle2,
   Clock3,
   FilePlus2,
-  ListChecks,
-  Printer,
+  RefreshCcw,
   Search,
-  Ticket,
-  UserCheck,
-  UserPlus,
+  Stethoscope,
+  UserPlus2,
   Users,
 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
+import { ErrorState, EmptyState, LoadingState } from '../components/common/PageState';
+import { appointmentApi } from '../services/appointmentApi';
+import { departmentApi } from '../services/departmentApi';
+import { doctorApi } from '../services/doctorApi';
+import { patientApi } from '../services/patientApi';
+import { queueApi } from '../services/queueApi';
+import { serviceApi } from '../services/serviceApi';
+import { visitApi } from '../services/visitApi';
+import type {
+  AppointmentListItemDto,
+  DepartmentDto,
+  DoctorDto,
+  PatientCreateInputDto,
+  PatientDto,
+  QueueItemSummaryDto,
+  ServiceDto,
+  VisitDetailForActionDto,
+  VisitListItemDto,
+} from '../services/backend-types';
+import { formatDateTime } from '../lib/format';
+import StatusBadge from '../components/ui/StatusBadge';
+import { LaneBadge, PriorityBadge } from '../components/ui/PriorityBadge';
+import type { PatientStatus } from '../types';
+import { useAuth } from '../context/AuthContext';
 
-type ReceptionStatus =
-  | 'Chờ tiếp nhận'
-  | 'Đã tiếp nhận'
-  | 'Chờ xác nhận lịch hẹn'
-  | 'Chờ khám'
-  | 'Đang khám'
-  | 'Chờ CLS'
-  | 'Đang thực hiện CLS'
-  | 'Chờ kết quả'
-  | 'Chờ kết luận'
-  | 'Hoàn tất';
+type ReceptionView = 'patient-records' | 'walk-in' | 'appointments' | 'patients' | 'visits' | 'queue';
+type GenderValue = 'MALE' | 'FEMALE' | 'OTHER';
 
-interface ReceptionPatient {
-  stt: string;
-  code: string;
-  name: string;
+type BasePatientForm = {
+  fullName: string;
+  gender: GenderValue;
+  dateOfBirth: string;
   phone: string;
-  registrationType: 'Đặt lịch trước' | 'Đến trực tiếp';
-  department: string;
-  expectedDoctor: string;
-  room: string;
-  status: ReceptionStatus;
-  priority?: boolean;
-  waitTime: string;
-  expectedWait: string;
+  idNumber: string;
   address: string;
+  insuranceNumber: string;
+  isDisabled: boolean;
+  isDisabledHeavy: boolean;
+  isRevolutionary: boolean;
+};
+
+type WalkInFormState = BasePatientForm & {
+  departmentId: string;
+  serviceId: string;
+  doctorId: string;
+  chiefComplaint: string;
   note: string;
-}
-
-interface DoctorSchedule {
-  name: string;
-  department: string;
-  waiting: number;
-  time: string;
-  status: 'Đang làm việc' | 'Tạm nghỉ' | 'Hết lịch';
-}
-
-const STATUS_FILTERS = ['Chờ tiếp nhận', 'Đã tiếp nhận', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Hoàn tất'] as const;
-
-const PATIENTS: ReceptionPatient[] = [
-  { stt: '001', code: 'BN001', name: 'Nguyễn Thị Lan', phone: '0987654321', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ tiếp nhận', priority: true, waitTime: '04 phút', expectedWait: '10 phút', address: 'Quận 3, TP.HCM', note: 'Đã đặt lịch trước, thai 28 tuần, cần xác minh thông tin BHYT.' },
-  { stt: '002', code: 'BN002', name: 'Trần Minh Anh', phone: '0912345678', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Đã tiếp nhận', waitTime: '08 phút', expectedWait: '18 phút', address: 'Quận 7, TP.HCM', note: 'Đã tạo hồ sơ và cần cấp số thứ tự.' },
-  { stt: '003', code: 'BN003', name: 'Phạm Thu Hà', phone: '0901122334', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Chờ khám', waitTime: '21 phút', expectedWait: '25 phút', address: 'Bình Thạnh, TP.HCM', note: 'Đã xác nhận lịch hẹn, đang chờ gọi vào phòng khám.' },
-  { stt: '004', code: 'BN004', name: 'Lê Hoàng Mai', phone: '0933445566', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Chờ CLS', waitTime: '34 phút', expectedWait: '20 phút', address: 'Thủ Đức, TP.HCM', note: 'Cần hỗ trợ điều phối sang khu cận lâm sàng.' },
-  { stt: '005', code: 'BN005', name: 'Hoàng Thu Trang', phone: '0966778899', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ xác nhận lịch hẹn', waitTime: '02 phút', expectedWait: '12 phút', address: 'Quận 10, TP.HCM', note: 'Lịch hẹn 09:30, chưa xác nhận có mặt.' },
-  { stt: '006', code: 'BN006', name: 'Đặng Ngọc Anh', phone: '0977889900', registrationType: 'Đến trực tiếp', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Hoàn tất', waitTime: '00 phút', expectedWait: '00 phút', address: 'Gò Vấp, TP.HCM', note: 'Đã hoàn tất luồng tiếp nhận trong ngày.' },
-  { stt: '007', code: 'BN007', name: 'Vũ Thanh Hương', phone: '0909988776', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Đang khám', priority: true, waitTime: '16 phút', expectedWait: '05 phút', address: 'Tân Bình, TP.HCM', note: 'Bệnh nhân ưu tiên, đã vào phòng khám.' },
-  { stt: '008', code: 'BN008', name: 'Bùi Khánh Linh', phone: '0911223344', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Mai Thanh Tú', room: 'Phòng 205', status: 'Chờ kết quả', waitTime: '43 phút', expectedWait: '15 phút', address: 'Phú Nhuận, TP.HCM', note: 'Theo dõi trạng thái để hướng dẫn bệnh nhân quay lại phòng khám.' },
-];
-
-const DOCTOR_SCHEDULES: DoctorSchedule[] = [
-  { name: 'BS Nguyễn Văn An', department: 'Sản khoa', waiting: 12, time: '07:30 - 11:30', status: 'Đang làm việc' },
-  { name: 'BS Trần Thu Hà', department: 'Phụ khoa', waiting: 8, time: '08:00 - 12:00', status: 'Đang làm việc' },
-  { name: 'BS Lê Minh Quân', department: 'Sản khoa', waiting: 0, time: '13:00 - 17:00', status: 'Tạm nghỉ' },
-  { name: 'BS Mai Thanh Tú', department: 'Phụ khoa', waiting: 5, time: '07:30 - 16:30', status: 'Đang làm việc' },
-  { name: 'BS Phạm Hoài Nam', department: 'Sản khoa', waiting: 0, time: '07:30 - 10:30', status: 'Hết lịch' },
-];
-
-const STATUS_STYLES: Record<ReceptionStatus, string> = {
-  'Chờ tiếp nhận': 'bg-blue-100 text-blue-700 border-blue-200',
-  'Đã tiếp nhận': 'bg-sky-100 text-sky-700 border-sky-200',
-  'Chờ xác nhận lịch hẹn': 'bg-amber-100 text-amber-700 border-amber-200',
-  'Chờ khám': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'Đang khám': 'bg-violet-100 text-violet-700 border-violet-200',
-  'Chờ CLS': 'bg-purple-100 text-purple-700 border-purple-200',
-  'Đang thực hiện CLS': 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
-  'Chờ kết quả': 'bg-orange-100 text-orange-700 border-orange-200',
-  'Chờ kết luận': 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  'Hoàn tất': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  isPregnant: boolean;
+  isUrgent: boolean;
 };
 
-const ACTIONS_BY_STATUS: Record<ReceptionStatus, string[]> = {
-  'Chờ tiếp nhận': ['Tiếp nhận', 'Xác nhận lịch hẹn'],
-  'Đã tiếp nhận': ['Tạo phiếu khám', 'Cấp số thứ tự'],
-  'Chờ xác nhận lịch hẹn': ['Xác nhận lịch hẹn', 'Đổi lịch'],
-  'Chờ khám': ['Điều phối', 'Xem trạng thái', 'In phiếu khám'],
-  'Đang khám': ['Xem trạng thái'],
-  'Chờ CLS': ['Điều phối', 'Xem trạng thái'],
-  'Đang thực hiện CLS': ['Xem trạng thái'],
-  'Chờ kết quả': ['Xem trạng thái'],
-  'Chờ kết luận': ['Xem trạng thái'],
-  'Hoàn tất': ['In phiếu khám'],
+type AppointmentFormState = BasePatientForm & {
+  departmentId: string;
+  serviceId: string;
+  doctorId: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  chiefComplaint: string;
+  note: string;
+  isPregnant: boolean;
+  isUrgent: boolean;
 };
 
-function StatusBadge({ status }: { status: ReceptionStatus }) {
+const VIEW_TITLES: Record<ReceptionView, string> = {
+  'patient-records': 'Tạo hồ sơ bệnh nhân',
+  'walk-in': 'Đăng ký khám tại quầy',
+  appointments: 'Đặt lịch và duyệt lịch online',
+  patients: 'Danh sách bệnh nhân',
+  visits: 'Danh sách lượt khám',
+  queue: 'Hàng đợi khám',
+};
+
+const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Chờ duyệt',
+  SCHEDULED: 'Chờ duyệt',
+  CONFIRMED: 'Đã duyệt',
+  CHECKED_IN: 'Đã check-in',
+  LATE: 'Đến muộn',
+  NO_SHOW: 'Vắng mặt',
+  CANCELLED: 'Đã hủy',
+};
+
+const QUEUE_STATUS_LABELS: Record<string, string> = {
+  WAITING: 'Đang chờ',
+  CALLED: 'Đã gọi',
+  SERVING: 'Đang phục vụ',
+  DONE: 'Hoàn tất',
+  TIMEOUT: 'Quá giờ',
+  CANCELLED: 'Đã hủy',
+};
+
+const toDateInput = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const toTimeInput = (value: Date) => {
+  const hours = String(value.getHours()).padStart(2, '0');
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+const calculateAgeFromDate = (dateOfBirth: string) => {
+  if (!dateOfBirth) return null;
+  const parsed = new Date(dateOfBirth);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - parsed.getFullYear();
+  const monthDelta = today.getMonth() - parsed.getMonth();
+
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
+    age -= 1;
+  }
+
+  return Math.max(age, 0);
+};
+
+const isPediatricsDepartment = (department?: DepartmentDto | null) =>
+  Boolean(department && (department.code?.toUpperCase() === 'NK' || department.name.toLowerCase().includes('nhi')));
+
+const isClinicalDepartment = (department?: DepartmentDto | null) =>
+  Boolean(
+    department &&
+      (department.code?.toUpperCase() === 'CLS' ||
+        department.name.toLowerCase().includes('cận lâm sàng') ||
+        department.name.toLowerCase().includes('can lam sang')),
+  );
+
+const createBasePatientForm = (): BasePatientForm => ({
+  fullName: '',
+  gender: 'OTHER',
+  dateOfBirth: '',
+  phone: '',
+  idNumber: '',
+  address: '',
+  insuranceNumber: '',
+  isDisabled: false,
+  isDisabledHeavy: false,
+  isRevolutionary: false,
+});
+
+const createWalkInForm = (): WalkInFormState => ({
+  ...createBasePatientForm(),
+  departmentId: '',
+  serviceId: '',
+  doctorId: '',
+  chiefComplaint: '',
+  note: '',
+  isPregnant: false,
+  isUrgent: false,
+});
+
+const createAppointmentForm = (): AppointmentFormState => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultTime = new Date();
+  defaultTime.setHours(9, 0, 0, 0);
+
+  return {
+    ...createBasePatientForm(),
+    departmentId: '',
+    serviceId: '',
+    doctorId: '',
+    appointmentDate: toDateInput(tomorrow),
+    appointmentTime: toTimeInput(defaultTime),
+    chiefComplaint: '',
+    note: '',
+    isPregnant: false,
+    isUrgent: false,
+  };
+};
+
+function SectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <span className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap', STATUS_STYLES[status])}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-      {status}
-    </span>
+    <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-base font-bold text-gray-900">{title}</h3>
+        {description ? <p className="mt-1 text-sm text-gray-500">{description}</p> : null}
+      </div>
+      {children}
+    </div>
   );
 }
 
-function TimelineStep({ label, active, done }: { label: string; active?: boolean; done?: boolean }) {
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={clsx(
-        'h-3 w-3 rounded-full border-2 flex-shrink-0',
-        active ? 'border-sky-600 bg-sky-600' : done ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300 bg-white'
-      )} />
-      <span className={clsx('text-xs font-medium', active ? 'text-sky-700' : done ? 'text-gray-700' : 'text-gray-400')}>
-        {label}
-      </span>
+    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+      {children}
+      {required ? <span className="ml-1 text-rose-500">*</span> : null}
+    </label>
+  );
+}
+
+function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={clsx(
+        'h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-sky-100',
+        props.className,
+      )}
+    />
+  );
+}
+
+function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={clsx(
+        'h-10 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-sky-100',
+        props.className,
+      )}
+    />
+  );
+}
+
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={clsx(
+        'w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-100',
+        props.className,
+      )}
+    />
+  );
+}
+
+function ToggleRow({
+  checked,
+  disabled,
+  label,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  description: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className={clsx(
+        'flex items-start gap-3 rounded-2xl border px-4 py-3',
+        disabled ? 'border-gray-100 bg-gray-50 text-gray-400' : 'border-gray-200 bg-white',
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={event => onChange(event.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-600"
+      />
+      <div>
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="text-xs">{description}</p>
+      </div>
+    </label>
+  );
+}
+
+function ReceptionPageHeader({
+  activeView,
+  onRefresh,
+  refreshing,
+}: {
+  activeView: ReceptionView;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  return (
+    <div className="rounded-[2rem] border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-700">
+            Quầy lễ tân
+          </p>
+          <h1 className="mt-3 text-2xl font-black text-gray-950 md:text-3xl">{VIEW_TITLES[activeView]}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+            Tách riêng tạo hồ sơ, đăng ký khám tại quầy và đặt lịch. Walk-in tạo Visit, queue number và hàng đợi ngay; appointment chỉ vào queue khi check-in.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50"
+        >
+          <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
+          Làm mới dữ liệu
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PatientFields({
+  value,
+  onChange,
+}: {
+  value: BasePatientForm;
+  onChange: <K extends keyof BasePatientForm>(key: K, nextValue: BasePatientForm[K]) => void;
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <div>
+        <FieldLabel required>Họ và tên</FieldLabel>
+        <TextInput value={value.fullName} onChange={event => onChange('fullName', event.target.value)} placeholder="Nguyễn Văn A" />
+      </div>
+      <div>
+        <FieldLabel required>Số điện thoại</FieldLabel>
+        <TextInput value={value.phone} onChange={event => onChange('phone', event.target.value)} placeholder="09..." />
+      </div>
+      <div>
+        <FieldLabel required>Giới tính</FieldLabel>
+        <SelectInput value={value.gender} onChange={event => onChange('gender', event.target.value as GenderValue)}>
+          <option value="MALE">Nam</option>
+          <option value="FEMALE">Nữ</option>
+          <option value="OTHER">Khác</option>
+        </SelectInput>
+      </div>
+      <div>
+        <FieldLabel>Ngày sinh</FieldLabel>
+        <TextInput type="date" value={value.dateOfBirth} onChange={event => onChange('dateOfBirth', event.target.value)} />
+      </div>
+      <div>
+        <FieldLabel>CCCD</FieldLabel>
+        <TextInput value={value.idNumber} onChange={event => onChange('idNumber', event.target.value)} />
+      </div>
+      <div>
+        <FieldLabel>Số BHYT</FieldLabel>
+        <TextInput value={value.insuranceNumber} onChange={event => onChange('insuranceNumber', event.target.value)} />
+      </div>
+      <div className="md:col-span-2">
+        <FieldLabel>Địa chỉ</FieldLabel>
+        <TextInput value={value.address} onChange={event => onChange('address', event.target.value)} />
+      </div>
+      <div className="md:col-span-2 grid gap-3 md:grid-cols-3">
+        <ToggleRow
+          checked={value.isDisabled}
+          label="Người khuyết tật"
+          description="Tính vào ưu tiên nghiệp vụ nếu có."
+          onChange={next => onChange('isDisabled', next)}
+        />
+        <ToggleRow
+          checked={value.isDisabledHeavy}
+          label="Khuyết tật nặng"
+          description="Mức ưu tiên cao hơn nếu có."
+          onChange={next => onChange('isDisabledHeavy', next)}
+        />
+        <ToggleRow
+          checked={value.isRevolutionary}
+          label="Đối tượng cách mạng"
+          description="Lưu vào hồ sơ bệnh nhân."
+          onChange={next => onChange('isRevolutionary', next)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SearchBar({
+  value,
+  onChange,
+  placeholder,
+  right,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={value}
+            onChange={event => onChange(event.target.value)}
+            placeholder={placeholder}
+            className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+        </div>
+        {right}
+      </div>
     </div>
   );
 }
 
 export default function ReceptionPage() {
-  const [searchParams] = useSearchParams();
-  const activeView = searchParams.get('view') ?? 'reception';
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
-  const [selectedCode, setSelectedCode] = useState('BN001');
-  const [scheduleDepartment, setScheduleDepartment] = useState('Tất cả');
-  const [scheduleDoctor, setScheduleDoctor] = useState('Tất cả');
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeView = (searchParams.get('view') as ReceptionView | null) ?? 'walk-in';
 
-  const filteredPatients = useMemo(() => {
-    const keyword = searchTerm.trim().toLowerCase();
-    return PATIENTS.filter(patient => {
-      const matchesKeyword = !keyword ||
-        patient.name.toLowerCase().includes(keyword) ||
-        patient.code.toLowerCase().includes(keyword) ||
-        patient.phone.includes(keyword) ||
-        patient.stt.toLowerCase().includes(keyword);
-      const matchesStatus = statusFilter === 'Tất cả' || patient.status === statusFilter;
-      return matchesKeyword && matchesStatus;
-    });
-  }, [searchTerm, statusFilter]);
+  const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [services, setServices] = useState<ServiceDto[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<DoctorDto[]>([]);
 
-  const filteredSchedules = useMemo(() => {
-    return DOCTOR_SCHEDULES.filter(schedule => {
-      const matchesDepartment = scheduleDepartment === 'Tất cả' || schedule.department === scheduleDepartment;
-      const matchesDoctor = scheduleDoctor === 'Tất cả' || schedule.name === scheduleDoctor;
-      return matchesDepartment && matchesDoctor;
-    });
-  }, [scheduleDepartment, scheduleDoctor]);
+  const [patients, setPatients] = useState<PatientDto[]>([]);
+  const [visits, setVisits] = useState<VisitListItemDto[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItemSummaryDto[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentListItemDto[]>([]);
 
-  const selectedPatient = PATIENTS.find(patient => patient.code === selectedCode) ?? filteredPatients[0] ?? PATIENTS[0];
-  const newArrival = PATIENTS.find(patient => patient.status === 'Chờ tiếp nhận');
-  const waitingAppointment = PATIENTS.find(patient => patient.status === 'Chờ xác nhận lịch hẹn');
-  const dispatchPatient = PATIENTS.find(patient => patient.status === 'Chờ CLS') ?? PATIENTS.find(patient => patient.status === 'Chờ khám');
+  const [listSearch, setListSearch] = useState('');
+  const [appointmentStatus, setAppointmentStatus] = useState('PENDING');
+  const [appointmentDateFilter, setAppointmentDateFilter] = useState('');
 
-  const stats = [
-    { label: 'Bệnh nhân đã tiếp nhận hôm nay', value: 42, icon: UserCheck, accent: 'bg-sky-50 text-sky-700 border-sky-100' },
-    { label: 'Đặt lịch chờ xác nhận', value: PATIENTS.filter(p => p.status === 'Chờ xác nhận lịch hẹn').length, icon: CalendarCheck, accent: 'bg-amber-50 text-amber-700 border-amber-100' },
-    { label: 'Bệnh nhân đang chờ khám', value: PATIENTS.filter(p => p.status === 'Chờ khám').length, icon: Users, accent: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
-    { label: 'Bệnh nhân cần điều phối', value: PATIENTS.filter(p => ['Chờ CLS', 'Chờ khám'].includes(p.status)).length, icon: ArrowRightLeft, accent: 'bg-purple-50 text-purple-700 border-purple-100' },
-    { label: 'Thời gian chờ trung bình', value: '18p', icon: Clock3, accent: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  const [walkInForm, setWalkInForm] = useState<WalkInFormState>(() => createWalkInForm());
+  const [patientForm, setPatientForm] = useState<BasePatientForm>(() => createBasePatientForm());
+  const [appointmentForm, setAppointmentForm] = useState<AppointmentFormState>(() => createAppointmentForm());
+
+  const [submittingPatient, setSubmittingPatient] = useState(false);
+  const [submittingWalkIn, setSubmittingWalkIn] = useState(false);
+  const [submittingAppointment, setSubmittingAppointment] = useState(false);
+  const [actioningAppointmentId, setActioningAppointmentId] = useState<string | null>(null);
+
+  const [patientSuccess, setPatientSuccess] = useState<PatientDto | null>(null);
+  const [walkInSuccess, setWalkInSuccess] = useState<VisitDetailForActionDto | null>(null);
+  const [appointmentSuccess, setAppointmentSuccess] = useState<AppointmentListItemDto | null>(null);
+  const [submitError, setSubmitError] = useState('');
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const activeDepartment = useMemo(
+    () => departments.find(department => department.id === walkInForm.departmentId) ?? null,
+    [departments, walkInForm.departmentId],
+  );
+  const activeAppointmentDepartment = useMemo(
+    () => departments.find(department => department.id === appointmentForm.departmentId) ?? null,
+    [appointmentForm.departmentId, departments],
+  );
+
+  const examServices = useMemo(
+    () => services.filter(service => service.serviceType === 'EXAM' && service.isActive !== false),
+    [services],
+  );
+  const walkInDepartments = useMemo(
+    () => departments.filter(department => !isClinicalDepartment(department)),
+    [departments],
+  );
+
+  const walkInAge = useMemo(() => calculateAgeFromDate(walkInForm.dateOfBirth), [walkInForm.dateOfBirth]);
+  const appointmentAge = useMemo(() => calculateAgeFromDate(appointmentForm.dateOfBirth), [appointmentForm.dateOfBirth]);
+
+  useEffect(() => {
+    if (walkInForm.gender !== 'FEMALE' && walkInForm.isPregnant) {
+      setWalkInForm(current => ({ ...current, isPregnant: false }));
+    }
+  }, [walkInForm.gender, walkInForm.isPregnant]);
+
+  useEffect(() => {
+    if (appointmentForm.gender !== 'FEMALE' && appointmentForm.isPregnant) {
+      setAppointmentForm(current => ({ ...current, isPregnant: false }));
+    }
+  }, [appointmentForm.gender, appointmentForm.isPregnant]);
+
+  useEffect(() => {
+    const loadCatalogs = async () => {
+      const [departmentRes, serviceRes] = await Promise.all([
+        departmentApi.list({ page: 1, limit: 100, status: 'active', sort: 'asc' }),
+        serviceApi.list({ page: 1, limit: 100, status: 'active', sort: 'asc' }),
+      ]);
+
+      setDepartments(departmentRes.data);
+      setServices(serviceRes.data);
+    };
+
+    const loadViewData = async () => {
+      const search = listSearch.trim() || undefined;
+      if (activeView === 'patients') {
+        const response = await patientApi.list({ page: 1, limit: 100, sort: 'desc', search });
+        setPatients(response.data);
+        return;
+      }
+
+      if (activeView === 'walk-in') {
+        const [patientResponse, visitResponse, queueResponse] = await Promise.all([
+          patientApi.list({ page: 1, limit: 100, sort: 'desc', search }),
+          visitApi.list({ page: 1, limit: 100, sort: 'desc', search }),
+          queueApi.list({ page: 1, limit: 100, sort: 'desc', search }),
+        ]);
+        setPatients(patientResponse.data);
+        setVisits(visitResponse.data);
+        setQueueItems(queueResponse.data);
+        return;
+      }
+
+      if (activeView === 'visits') {
+        const response = await visitApi.list({ page: 1, limit: 100, sort: 'desc', search });
+        setVisits(response.data);
+        return;
+      }
+
+      if (activeView === 'queue') {
+        const response = await queueApi.list({ page: 1, limit: 100, sort: 'desc', search });
+        setQueueItems(response.data);
+        return;
+      }
+
+      if (activeView === 'appointments') {
+        const response = await appointmentApi.list({
+          page: 1,
+          limit: 100,
+          sort: 'asc',
+          search,
+          status: appointmentStatus,
+          date: appointmentDateFilter || undefined,
+        });
+        setAppointments(response.data);
+      }
+    };
+
+    let active = true;
+    const run = async () => {
+      try {
+        setError('');
+        setLoading(true);
+        setRefreshing(true);
+        await loadCatalogs();
+        if (!active) return;
+        await loadViewData();
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Không tải được dữ liệu lễ tân.');
+      } finally {
+        if (active) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [activeView, appointmentDateFilter, appointmentStatus, listSearch, reloadKey]);
+
+  useEffect(() => {
+    const departmentId =
+      activeView === 'appointments' ? appointmentForm.departmentId : walkInForm.departmentId;
+
+    let active = true;
+    const loadDoctors = async () => {
+      try {
+        const response = await doctorApi.list({
+          page: 1,
+          limit: 100,
+          sort: 'asc',
+          status: 'active',
+          ...(departmentId ? { departmentId } : {}),
+        });
+        if (active) {
+          setDoctorOptions(response.data);
+        }
+      } catch (_err) {
+        if (active) {
+          setDoctorOptions([]);
+        }
+      }
+    };
+
+    void loadDoctors();
+    return () => {
+      active = false;
+    };
+  }, [activeView, appointmentForm.departmentId, walkInForm.departmentId]);
+
+  useEffect(() => {
+    if (!walkInForm.doctorId) return;
+    if (doctorOptions.some(doctor => doctor.id === walkInForm.doctorId)) return;
+    setWalkInForm(current => ({ ...current, doctorId: '' }));
+  }, [doctorOptions, walkInForm.doctorId]);
+
+  useEffect(() => {
+    if (!walkInForm.departmentId) return;
+    if (walkInDepartments.some(department => department.id === walkInForm.departmentId)) return;
+    setWalkInForm(current => ({ ...current, departmentId: '', doctorId: '' }));
+  }, [walkInDepartments, walkInForm.departmentId]);
+
+  useEffect(() => {
+    if (!appointmentForm.doctorId) return;
+    if (doctorOptions.some(doctor => doctor.id === appointmentForm.doctorId)) return;
+    setAppointmentForm(current => ({ ...current, doctorId: '' }));
+  }, [appointmentForm.doctorId, doctorOptions]);
+
+  const refreshCurrentView = () => setReloadKey(current => current + 1);
+
+  const setView = (view: ReceptionView) => {
+    setListSearch('');
+    setSubmitError('');
+    setPatientSuccess(null);
+    setSearchParams({ view });
+  };
+
+  const updatePatientForm = <K extends keyof BasePatientForm>(key: K, value: BasePatientForm[K]) => {
+    setPatientForm(current => ({ ...current, [key]: value }));
+  };
+
+  const updateWalkInPatientForm = <K extends keyof BasePatientForm>(key: K, value: BasePatientForm[K]) => {
+    setWalkInForm(current => ({ ...current, [key]: value }));
+  };
+
+  const updateWalkInForm = <K extends keyof WalkInFormState>(key: K, value: WalkInFormState[K]) => {
+    setWalkInForm(current => ({ ...current, [key]: value }));
+  };
+
+  const updateAppointmentPatientForm = <K extends keyof BasePatientForm>(key: K, value: BasePatientForm[K]) => {
+    setAppointmentForm(current => ({ ...current, [key]: value }));
+  };
+
+  const updateAppointmentForm = <K extends keyof AppointmentFormState>(key: K, value: AppointmentFormState[K]) => {
+    setAppointmentForm(current => ({ ...current, [key]: value }));
+  };
+
+  const validatePediatricsSelection = (department: DepartmentDto | null, age: number | null) => {
+    if (!isPediatricsDepartment(department)) return '';
+    if (age === null) return 'Cần ngày sinh để kiểm tra điều kiện chọn khoa Nhi.';
+    if (age >= 15) return 'Chỉ bệnh nhân dưới 15 tuổi mới được chọn khoa Nhi.';
+    return '';
+  };
+
+  const walkInPediatricsError = validatePediatricsSelection(activeDepartment, walkInAge);
+  const appointmentPediatricsError = validatePediatricsSelection(activeAppointmentDepartment, appointmentAge);
+
+  const buildPatientPayload = (form: BasePatientForm): PatientCreateInputDto => ({
+    fullName: form.fullName.trim(),
+    gender: form.gender,
+    dateOfBirth: form.dateOfBirth || null,
+    phone: form.phone.trim(),
+    idNumber: form.idNumber.trim() || null,
+    address: form.address.trim() || null,
+    insuranceNumber: form.insuranceNumber.trim() || null,
+    isDisabled: form.isDisabled,
+    isDisabledHeavy: form.isDisabledHeavy,
+    isRevolutionary: form.isRevolutionary,
+  });
+
+  const handleCreatePatient = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitError('');
+    setPatientSuccess(null);
+    setSubmittingPatient(true);
+    try {
+      const response = await patientApi.create(buildPatientPayload(patientForm));
+      setPatientSuccess(response.data);
+      setPatientForm(createBasePatientForm());
+      refreshCurrentView();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Không tạo được hồ sơ bệnh nhân.');
+    } finally {
+      setSubmittingPatient(false);
+    }
+  };
+
+  const handleWalkIn = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitError('');
+    setWalkInSuccess(null);
+
+    if (walkInPediatricsError) {
+      setSubmitError(walkInPediatricsError);
+      return;
+    }
+
+    setSubmittingWalkIn(true);
+    try {
+      const response = await visitApi.createWalkIn({
+        ...buildPatientPayload(walkInForm),
+        departmentId: walkInForm.departmentId,
+        serviceId: walkInForm.serviceId,
+        doctorId: walkInForm.doctorId || null,
+        chiefComplaint: walkInForm.chiefComplaint.trim() || null,
+        note: walkInForm.note.trim() || null,
+        isPregnant: walkInForm.gender === 'FEMALE' ? walkInForm.isPregnant : false,
+        isUrgent: walkInForm.isUrgent,
+        updatedById: user?.id ?? null,
+      });
+      setWalkInSuccess(response.data);
+      setWalkInForm(createWalkInForm());
+      refreshCurrentView();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Không đăng ký khám tại quầy được.');
+    } finally {
+      setSubmittingWalkIn(false);
+    }
+  };
+
+  const handleCreateAppointment = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitError('');
+
+    if (appointmentPediatricsError) {
+      setSubmitError(appointmentPediatricsError);
+      return;
+    }
+
+    const appointmentTime = new Date(`${appointmentForm.appointmentDate}T${appointmentForm.appointmentTime}:00`);
+    if (Number.isNaN(appointmentTime.getTime())) {
+      setSubmitError('Thời gian khám không hợp lệ.');
+      return;
+    }
+
+    setSubmittingAppointment(true);
+    try {
+      const response = await appointmentApi.create({
+        ...buildPatientPayload(appointmentForm),
+        departmentId: appointmentForm.departmentId,
+        serviceId: appointmentForm.serviceId,
+        doctorId: appointmentForm.doctorId || null,
+        appointmentTime: appointmentTime.toISOString(),
+        chiefComplaint: appointmentForm.chiefComplaint.trim() || null,
+        note: appointmentForm.note.trim() || null,
+        isPregnant: appointmentForm.gender === 'FEMALE' ? appointmentForm.isPregnant : false,
+        isUrgent: appointmentForm.isUrgent,
+      });
+      setAppointmentSuccess({
+        ...response.data.appointment,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        patient: response.data.patient,
+        visit: null,
+      });
+      setAppointmentForm(createAppointmentForm());
+      refreshCurrentView();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Không tạo được lịch khám.');
+    } finally {
+      setSubmittingAppointment(false);
+    }
+  };
+
+  const handleAppointmentAction = async (appointmentId: string, action: 'approve' | 'reject' | 'check-in') => {
+    setSubmitError('');
+    setActioningAppointmentId(appointmentId);
+    try {
+      if (action === 'approve') {
+        await appointmentApi.approve(appointmentId);
+      } else if (action === 'reject') {
+        await appointmentApi.reject(appointmentId);
+      } else {
+        await appointmentApi.checkIn(appointmentId, { updatedById: user?.id ?? null });
+      }
+
+      refreshCurrentView();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Không cập nhật được lịch hẹn.');
+    } finally {
+      setActioningAppointmentId(null);
+    }
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <Layout pageTitle={VIEW_TITLES[activeView]}>
+        <LoadingState label="Đang tải dữ liệu lễ tân..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout pageTitle={VIEW_TITLES[activeView]}>
+        <ErrorState message={error} onRetry={refreshCurrentView} />
+      </Layout>
+    );
+  }
+
+  const tabs: Array<{ key: ReceptionView; label: string; icon: React.ReactNode }> = [
+    { key: 'patient-records', label: 'Tạo hồ sơ', icon: <UserPlus2 size={14} /> },
+    { key: 'walk-in', label: 'Khám tại quầy', icon: <Stethoscope size={14} /> },
+    { key: 'appointments', label: 'Đặt lịch / Duyệt lịch', icon: <CalendarDays size={14} /> },
+    { key: 'patients', label: 'Bệnh nhân', icon: <Users size={14} /> },
+    { key: 'visits', label: 'Lượt khám', icon: <Clock3 size={14} /> },
+    { key: 'queue', label: 'Hàng đợi', icon: <FilePlus2 size={14} /> },
   ];
 
-  const timeline = ['Tiếp nhận', 'Tạo phiếu khám', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Chờ kết quả', 'Chờ kết luận', 'Hoàn tất'];
-  const currentTimelineIndex = Math.max(0, timeline.findIndex(step =>
-    step === selectedPatient.status ||
-    (selectedPatient.status === 'Chờ tiếp nhận' && step === 'Tiếp nhận') ||
-    (selectedPatient.status === 'Đã tiếp nhận' && step === 'Tạo phiếu khám') ||
-    (selectedPatient.status === 'Đang thực hiện CLS' && step === 'Chờ kết quả')
-  ));
-
-  const showStats = activeView === 'reception' || activeView === 'overview';
-  const showAlerts = ['reception', 'overview', 'appointments', 'notifications'].includes(activeView);
-  const showPatientTable = ['reception', 'appointments', 'patients'].includes(activeView);
-  const showSchedule = ['reception', 'overview', 'doctors'].includes(activeView);
-  const showDetailPanel = ['reception', 'appointments', 'patients', 'notifications', 'account'].includes(activeView);
-  const mainTitle = {
-    reception: 'Tiếp nhận bệnh nhân',
-    overview: 'Tổng quan lễ tân',
-    appointments: 'Đăng ký khám / Đặt lịch',
-    patients: 'Danh sách bệnh nhân',
-    doctors: 'Lịch làm việc bác sĩ',
-    notifications: 'Thông báo',
-    account: 'Tài khoản',
-  }[activeView] ?? 'Tiếp nhận bệnh nhân';
-
   return (
-    <Layout pageTitle={mainTitle}>
+    <Layout pageTitle={VIEW_TITLES[activeView]}>
       <div className="space-y-5">
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Quầy lễ tân hôm nay</p>
-              <h1 className="mt-1 text-2xl font-bold text-gray-900">Bảng điều khiển lễ tân</h1>
-              <p className="mt-1 text-sm text-gray-500">Tiếp nhận, đăng ký khám và theo dõi luồng bệnh nhân trong ngày</p>
-            </div>
-            <div className="flex flex-col gap-3 xl:items-end">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="relative min-w-[300px]">
-                  <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={searchTerm}
-                    onChange={event => setSearchTerm(event.target.value)}
-                    placeholder="Tìm tên, mã BN, SĐT hoặc số thứ tự"
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700">
-                    <UserPlus size={16} />
-                    Tiếp nhận bệnh nhân
-                  </button>
-                  <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100">
-                    <FilePlus2 size={16} />
-                    Tạo phiếu khám
-                  </button>
-                  <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100">
-                    <CalendarCheck size={16} />
-                    Xác nhận lịch hẹn
-                  </button>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {['Tất cả', ...STATUS_FILTERS].map(status => (
-                  <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={clsx(
-                      'rounded-lg border px-3 py-2 text-xs font-semibold transition',
-                      statusFilter === status
-                        ? 'border-sky-200 bg-sky-100 text-sky-800'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-sky-200 hover:text-sky-700'
-                    )}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <ReceptionPageHeader activeView={activeView} onRefresh={refreshCurrentView} refreshing={refreshing} />
 
-        {showStats && (
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {stats.map(item => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setView(tab.key)}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
+                activeView === tab.key
+                  ? 'border-sky-200 bg-sky-600 text-white'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-sky-200 hover:text-sky-700',
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {submitError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {submitError}
+          </div>
+        ) : null}
+
+        {activeView === 'patient-records' && (
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <SectionCard title="Chỉ tạo hồ sơ bệnh nhân" description="Flow này chỉ tạo hoặc cập nhật Patient, không sinh Visit và không đưa vào hàng đợi.">
+              <form className="space-y-4" onSubmit={handleCreatePatient}>
+                <PatientFields value={patientForm} onChange={(key, value) => updatePatientForm(key, value)} />
+                <div className="flex gap-3">
+                  <button type="submit" disabled={submittingPatient} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
+                    {submittingPatient ? 'Đang lưu...' : 'Tạo hồ sơ'}
+                  </button>
+                  <button type="button" onClick={() => setPatientForm(createBasePatientForm())} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                    Làm mới form
+                  </button>
+                </div>
+              </form>
+            </SectionCard>
+
+            <SectionCard title="Kết quả gần nhất" description="Sau khi tạo hồ sơ, bệnh nhân chỉ xuất hiện ở danh sách Patient cho đến khi được đăng ký khám.">
+              {patientSuccess ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="text-emerald-700" size={20} />
                     <div>
-                      <p className="text-xs font-medium text-gray-500">{item.label}</p>
-                      <p className="mt-2 text-2xl font-bold text-gray-900">{item.value}</p>
-                    </div>
-                    <div className={clsx('flex h-10 w-10 items-center justify-center rounded-lg border', item.accent)}>
-                      <Icon size={18} />
+                      <p className="font-semibold text-emerald-900">Đã tạo hồ sơ bệnh nhân</p>
+                      <p className="mt-1 text-sm text-emerald-700">
+                        {patientSuccess.fullName} · {patientSuccess.patientCode}
+                      </p>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </section>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                  Chưa có hồ sơ nào được tạo trong phiên làm việc này.
+                </p>
+              )}
+            </SectionCard>
+          </div>
         )}
 
-        <section className={clsx(
-          'grid grid-cols-1 gap-5',
-          showDetailPanel ? 'xl:grid-cols-[minmax(0,1fr)_370px]' : 'xl:grid-cols-1'
-        )}>
-          <div className="space-y-5">
-            {showAlerts && (
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                {[
-                  { label: 'Bệnh nhân mới đến', patient: newArrival, icon: Bell },
-                  { label: 'Lịch hẹn chờ xác nhận', patient: waitingAppointment, icon: CalendarCheck },
-                  { label: 'Cần điều phối', patient: dispatchPatient, icon: ArrowRightLeft },
-                ].map(item => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => item.patient && setSelectedCode(item.patient.code)}
-                      className="rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
-                        <Icon size={17} className="text-sky-600" />
-                      </div>
-                      <p className="mt-2 text-sm font-bold text-gray-900">{item.patient?.stt} - {item.patient?.name}</p>
-                      <p className="mt-1 text-xs text-gray-500">{item.patient?.department} • {item.patient?.waitTime}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+        {activeView === 'walk-in' && (
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <SectionCard title="Đăng ký khám ngay trong ngày" description="Flow này không có chọn giờ khám. Submit xong phải có Visit, QueueItem, Turn và số thứ tự.">
+              <form className="space-y-4" onSubmit={handleWalkIn}>
+                <PatientFields value={walkInForm} onChange={updateWalkInPatientForm} />
 
-            {activeView === 'appointments' && (
-              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <h2 className="text-base font-bold text-gray-900">Đăng ký khám và xác nhận lịch hẹn</h2>
-                    <p className="text-sm text-gray-600">Tập trung xử lý bệnh nhân đặt lịch trước, tạo phiếu khám và cấp số thứ tự.</p>
+                    <FieldLabel required>Khoa khám</FieldLabel>
+                    <SelectInput value={walkInForm.departmentId} onChange={event => updateWalkInForm('departmentId', event.target.value)}>
+                      <option value="" disabled hidden>Chọn khoa</option>
+                      {walkInDepartments.map(department => (
+                        <option key={department.id} value={department.id}>{department.name}</option>
+                      ))}
+                    </SelectInput>
+                    {walkInPediatricsError ? <p className="mt-1 text-xs text-rose-600">{walkInPediatricsError}</p> : null}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700">Tiếp nhận mới</button>
-                    <button className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-100">Xác nhận lịch</button>
+                  <div>
+                    <FieldLabel required>Dịch vụ khám</FieldLabel>
+                    <SelectInput value={walkInForm.serviceId} onChange={event => updateWalkInForm('serviceId', event.target.value)}>
+                      <option value="" disabled hidden>Chọn dịch vụ</option>
+                      {examServices.map(service => (
+                        <option key={service.id} value={service.id}>{service.name}</option>
+                      ))}
+                    </SelectInput>
+                  </div>
+                  <div>
+                    <FieldLabel>Bác sĩ yêu cầu</FieldLabel>
+                    <SelectInput value={walkInForm.doctorId} onChange={event => updateWalkInForm('doctorId', event.target.value)} disabled={!walkInForm.departmentId}>
+                      <option value="" disabled hidden>Chọn bác sĩ</option>
+                      {doctorOptions.map(doctor => (
+                        <option key={doctor.id} value={doctor.id}>{doctor.name}</option>
+                      ))}
+                    </SelectInput>
+                  </div>
+                  <div>
+                    <FieldLabel>Tuổi tính từ ngày sinh</FieldLabel>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
+                      {walkInAge ?? 'Chưa xác định'}
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <FieldLabel>Lý do khám</FieldLabel>
+                    <TextArea rows={3} value={walkInForm.chiefComplaint} onChange={event => updateWalkInForm('chiefComplaint', event.target.value)} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <FieldLabel>Ghi chú</FieldLabel>
+                    <TextArea rows={2} value={walkInForm.note} onChange={event => updateWalkInForm('note', event.target.value)} />
                   </div>
                 </div>
-              </div>
-            )}
 
-            {showPatientTable && (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-3 border-b border-gray-200 p-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">{activeView === 'patients' ? 'Danh sách bệnh nhân' : 'Danh sách tiếp nhận và hàng đợi'}</h2>
-                  <p className="text-sm text-gray-500">Theo dõi bệnh nhân mới đến, lịch hẹn và trạng thái điều phối</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <ToggleRow
+                    checked={walkInForm.isPregnant}
+                    disabled={walkInForm.gender !== 'FEMALE'}
+                    label="Có thai"
+                    description={walkInForm.gender === 'FEMALE' ? 'Chỉ bật cho bệnh nhân nữ.' : 'Bị khóa và tự reset false nếu không phải nữ.'}
+                    onChange={next => updateWalkInForm('isPregnant', next)}
+                  />
+                  <ToggleRow
+                    checked={walkInForm.isUrgent}
+                    label="Khẩn / cần ưu tiên"
+                    description="Đẩy vào luồng ưu tiên nếu nghiệp vụ áp dụng."
+                    onChange={next => updateWalkInForm('isUrgent', next)}
+                  />
                 </div>
-                <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
-                  <Printer size={16} />
-                  In danh sách
-                </button>
-              </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-[1180px] w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-800">
+                  Khám tại quầy luôn là “khám ngay trong ngày”. Không có field chọn thời gian khám ở flow này.
+                </div>
+
+                <div className="flex gap-3">
+                  <button type="submit" disabled={submittingWalkIn} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
+                    {submittingWalkIn ? 'Đang đăng ký...' : 'Đăng ký khám tại quầy'}
+                  </button>
+                  <button type="button" onClick={() => setWalkInForm(createWalkInForm())} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                    Làm mới form
+                  </button>
+                </div>
+              </form>
+            </SectionCard>
+
+            <div className="space-y-4">
+              <SectionCard title="Kết quả đăng ký gần nhất" description="Nếu transaction thành công thì phải có queue number rõ ràng cho lễ tân.">
+                {walkInSuccess ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-sm font-semibold text-emerald-900">{walkInSuccess.patient.fullName}</p>
+                    <p className="mt-1 text-sm text-emerald-700">
+                      Số thứ tự: <span className="font-mono font-black">{walkInSuccess.queueNumber}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Visit: {walkInSuccess.visitId} · Trạng thái: {walkInSuccess.currentState}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                    Chưa có lượt đăng ký khám tại quầy nào trong phiên này.
+                  </p>
+                )}
+              </SectionCard>
+
+              <SectionCard title="Hàng đợi hiện tại" description="Bệnh nhân vừa đăng ký phải xuất hiện ngay ở đây nếu transaction hoàn tất.">
+                {queueItems.length === 0 ? (
+                  <EmptyState title="Chưa có hàng đợi" description="Backend chưa trả về queue item nào." />
+                ) : (
+                  <div className="space-y-3">
+                    {queueItems.slice(0, 5).map(item => (
+                      <div key={item.queueItemId} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-800">{item.patient.fullName}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {item.queueNumber} · {item.room?.name ?? 'Chưa có phòng'}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600">
+                            {QUEUE_STATUS_LABELS[item.currentStatus] ?? item.currentStatus}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+          </div>
+        )}
+
+        {activeView === 'appointments' && (
+          <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <SectionCard title="Đặt lịch khám" description="Flow này chỉ tạo Appointment. Không tạo QueueItem cho đến khi check-in.">
+                <form className="space-y-4" onSubmit={handleCreateAppointment}>
+                  <PatientFields value={appointmentForm} onChange={updateAppointmentPatientForm} />
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <FieldLabel required>Khoa khám</FieldLabel>
+                      <SelectInput value={appointmentForm.departmentId} onChange={event => updateAppointmentForm('departmentId', event.target.value)}>
+                        <option value="">Chọn khoa</option>
+                        {departments.map(department => (
+                          <option key={department.id} value={department.id}>{department.name}</option>
+                        ))}
+                      </SelectInput>
+                      {appointmentPediatricsError ? <p className="mt-1 text-xs text-rose-600">{appointmentPediatricsError}</p> : null}
+                    </div>
+                    <div>
+                      <FieldLabel required>Dịch vụ khám</FieldLabel>
+                      <SelectInput value={appointmentForm.serviceId} onChange={event => updateAppointmentForm('serviceId', event.target.value)}>
+                        <option value="">Chọn dịch vụ</option>
+                        {examServices.map(service => (
+                          <option key={service.id} value={service.id}>{service.name}</option>
+                        ))}
+                      </SelectInput>
+                    </div>
+                    <div>
+                      <FieldLabel>Bác sĩ yêu cầu</FieldLabel>
+                      <SelectInput value={appointmentForm.doctorId} onChange={event => updateAppointmentForm('doctorId', event.target.value)} disabled={!appointmentForm.departmentId}>
+                        <option value="">Để hệ thống sắp xếp</option>
+                        {doctorOptions.map(doctor => (
+                          <option key={doctor.id} value={doctor.id}>{doctor.name}</option>
+                        ))}
+                      </SelectInput>
+                    </div>
+                    <div>
+                      <FieldLabel>Tuổi tính từ ngày sinh</FieldLabel>
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
+                        {appointmentAge ?? 'Chưa xác định'}
+                      </div>
+                    </div>
+                    <div>
+                      <FieldLabel required>Ngày khám</FieldLabel>
+                      <TextInput type="date" value={appointmentForm.appointmentDate} onChange={event => updateAppointmentForm('appointmentDate', event.target.value)} />
+                    </div>
+                    <div>
+                      <FieldLabel required>Giờ khám</FieldLabel>
+                      <TextInput type="time" value={appointmentForm.appointmentTime} onChange={event => updateAppointmentForm('appointmentTime', event.target.value)} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <FieldLabel>Lý do khám</FieldLabel>
+                      <TextArea rows={3} value={appointmentForm.chiefComplaint} onChange={event => updateAppointmentForm('chiefComplaint', event.target.value)} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <FieldLabel>Ghi chú</FieldLabel>
+                      <TextArea rows={2} value={appointmentForm.note} onChange={event => updateAppointmentForm('note', event.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <ToggleRow
+                      checked={appointmentForm.isPregnant}
+                      disabled={appointmentForm.gender !== 'FEMALE'}
+                      label="Có thai"
+                      description={appointmentForm.gender === 'FEMALE' ? 'Chỉ bật cho bệnh nhân nữ.' : 'Bị khóa và tự reset false nếu không phải nữ.'}
+                      onChange={next => updateAppointmentForm('isPregnant', next)}
+                    />
+                    <ToggleRow
+                      checked={appointmentForm.isUrgent}
+                      label="Cần ưu tiên"
+                      description="Áp dụng khi check-in nếu nghiệp vụ phù hợp."
+                      onChange={next => updateAppointmentForm('isUrgent', next)}
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button type="submit" disabled={submittingAppointment} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
+                      {submittingAppointment ? 'Đang tạo...' : 'Tạo appointment'}
+                    </button>
+                    <button type="button" onClick={() => setAppointmentForm(createAppointmentForm())} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                      Làm mới form
+                    </button>
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard title="Lịch vừa tạo" description="Appointment đã xác nhận vẫn chưa vào queue cho đến khi check-in.">
+                {appointmentSuccess ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="font-semibold text-emerald-900">{appointmentSuccess.patient.fullName}</p>
+                    <p className="mt-1 text-sm text-emerald-700">
+                      {formatDateTime(appointmentSuccess.appointmentTime)} · {APPOINTMENT_STATUS_LABELS[appointmentSuccess.status] ?? appointmentSuccess.status}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                    Chưa có appointment mới nào trong phiên này.
+                  </p>
+                )}
+              </SectionCard>
+            </div>
+
+            <SearchBar
+              value={listSearch}
+              onChange={setListSearch}
+              placeholder="Tìm theo tên bệnh nhân, số điện thoại, CCCD, mã lịch..."
+              right={(
+                <>
+                  <SelectInput value={appointmentStatus} onChange={event => setAppointmentStatus(event.target.value)} className="w-auto min-w-[170px]">
+                    <option value="PENDING">Chờ duyệt</option>
+                    <option value="CONFIRMED">Đã duyệt</option>
+                    <option value="CHECKED_IN">Đã check-in</option>
+                    <option value="CANCELLED">Đã hủy</option>
+                    <option value="ALL">Tất cả</option>
+                  </SelectInput>
+                  <TextInput type="date" value={appointmentDateFilter} onChange={event => setAppointmentDateFilter(event.target.value)} className="w-auto min-w-[160px]" />
+                </>
+              )}
+            />
+
+            {appointments.length === 0 ? (
+              <EmptyState title="Chưa có appointment phù hợp" description="Danh sách này dùng để lễ tân duyệt, hủy hoặc check-in appointment." />
+            ) : (
+              <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3">STT</th>
-                      <th className="px-4 py-3">Mã bệnh nhân</th>
-                      <th className="px-4 py-3">Họ tên</th>
-                      <th className="px-4 py-3">Số điện thoại</th>
-                      <th className="px-4 py-3">Loại đăng ký</th>
-                      <th className="px-4 py-3">Chuyên khoa</th>
-                      <th className="px-4 py-3">Bác sĩ dự kiến</th>
-                      <th className="px-4 py-3">Trạng thái</th>
-                      <th className="px-4 py-3">Mức ưu tiên</th>
-                      <th className="px-4 py-3">Thời gian chờ</th>
-                      <th className="px-4 py-3">Hành động</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Lịch hẹn</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bác sĩ / Khoa</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Trạng thái</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Hành động</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredPatients.map(patient => (
-                      <tr
-                        key={patient.code}
-                        onClick={() => setSelectedCode(patient.code)}
-                        className={clsx('cursor-pointer transition hover:bg-sky-50/60', selectedPatient.code === patient.code && 'bg-sky-50')}
-                      >
-                        <td className="px-4 py-3 font-mono font-bold text-sky-700">{patient.stt}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-700">{patient.code}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">{patient.name}</td>
+                  <tbody>
+                    {appointments.map(item => {
+                      const busy = actioningAppointmentId === item.appointmentId;
+                      return (
+                        <tr key={item.appointmentId} className="border-t border-gray-50">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-gray-800">{item.patient.fullName}</div>
+                            <div className="text-xs text-gray-400">{item.patient.phone} · {item.patient.patientCode}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            <div>{formatDateTime(item.appointmentTime)}</div>
+                            <div className="text-xs text-gray-400">{item.service?.name ?? 'Chưa có dịch vụ'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            <div>{item.doctor?.name ?? 'Chưa chọn bác sĩ'}</div>
+                            <div className="text-xs text-gray-400">{item.doctor?.department?.name ?? item.room?.department?.name ?? 'Chưa có khoa'}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                              {APPOINTMENT_STATUS_LABELS[item.status] ?? item.status}
+                            </span>
+                            {item.visit?.queueNumber ? (
+                              <div className="mt-1 text-xs text-emerald-700">Queue: {item.visit.queueNumber}</div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              {item.status === 'SCHEDULED' && (
+                                <>
+                                  <button type="button" disabled={busy} onClick={() => void handleAppointmentAction(item.appointmentId, 'approve')} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
+                                    Duyệt
+                                  </button>
+                                  <button type="button" disabled={busy} onClick={() => void handleAppointmentAction(item.appointmentId, 'reject')} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60">
+                                    Từ chối
+                                  </button>
+                                </>
+                              )}
+                              {['SCHEDULED', 'CONFIRMED', 'LATE'].includes(item.status) && (
+                                <button type="button" disabled={busy} onClick={() => void handleAppointmentAction(item.appointmentId, 'check-in')} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60">
+                                  Check-in
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeView === 'patients' && (
+          <>
+            <SearchBar value={listSearch} onChange={setListSearch} placeholder="Tìm theo tên, mã BN, số điện thoại, CCCD..." />
+            {patients.length === 0 ? (
+              <EmptyState title="Không có bệnh nhân phù hợp" description="Thử thay đổi từ khóa tìm kiếm." />
+            ) : (
+              <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Mã BN</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Họ tên</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Liên hệ</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Ưu tiên hồ sơ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients.map(patient => (
+                      <tr key={patient.id} className="border-t border-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{patient.patientCode}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-gray-800">{patient.fullName}</div>
+                          <div className="text-xs text-gray-400">{patient.gender} · {patient.age ?? 'N/A'} tuổi</div>
+                        </td>
                         <td className="px-4 py-3 text-gray-600">{patient.phone}</td>
-                        <td className="px-4 py-3 text-gray-600">{patient.registrationType}</td>
-                        <td className="px-4 py-3 text-gray-600">{patient.department}</td>
-                        <td className="px-4 py-3 text-gray-600">{patient.expectedDoctor}</td>
-                        <td className="px-4 py-3"><StatusBadge status={patient.status} /></td>
-                        <td className="px-4 py-3">
-                          {patient.priority ? (
-                            <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">Ưu tiên</span>
-                          ) : (
-                            <span className="text-xs font-medium text-gray-400">Thường</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Clock3 size={14} className="text-gray-400" />
-                            {patient.waitTime}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex max-w-[250px] flex-wrap gap-1.5">
-                            {ACTIONS_BY_STATUS[patient.status].map(action => (
-                              <button
-                                key={action}
-                                onClick={event => {
-                                  event.stopPropagation();
-                                  setSelectedCode(patient.code);
-                                }}
-                                className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
-                              >
-                                {action}
-                              </button>
-                            ))}
-                          </div>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {[patient.isDisabledHeavy && 'Khuyết tật nặng', patient.isDisabled && 'Khuyết tật', patient.isRevolutionary && 'Cách mạng'].filter(Boolean).join(', ') || 'Bình thường'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
             )}
+          </>
+        )}
 
-            {showSchedule && (
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Lịch làm việc bác sĩ</h2>
-                  <p className="text-sm text-gray-500">Dùng để phân bổ và điều phối bệnh nhân theo phòng khám</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    type="date"
-                    defaultValue="2026-06-05"
-                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                  />
-                  <select
-                    value={scheduleDepartment}
-                    onChange={event => setScheduleDepartment(event.target.value)}
-                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                  >
-                    <option>Tất cả</option>
-                    <option>Sản khoa</option>
-                    <option>Phụ khoa</option>
-                  </select>
-                  <select
-                    value={scheduleDoctor}
-                    onChange={event => setScheduleDoctor(event.target.value)}
-                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                  >
-                    <option>Tất cả</option>
-                    {DOCTOR_SCHEDULES.map(schedule => <option key={schedule.name}>{schedule.name}</option>)}
-                  </select>
-                </div>
+        {activeView === 'visits' && (
+          <>
+            <SearchBar value={listSearch} onChange={setListSearch} placeholder="Tìm theo số thứ tự, tên bệnh nhân, phòng, bác sĩ..." />
+            {visits.length === 0 ? (
+              <EmptyState title="Không có lượt khám phù hợp" description="Thử thay đổi từ khóa tìm kiếm." />
+            ) : (
+              <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Số thứ tự</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Trạng thái</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Phòng / Bác sĩ</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Ưu tiên</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visits.map(visit => (
+                      <tr key={visit.visitId} className="border-t border-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{visit.queueNumber}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-gray-800">{visit.patient.fullName}</div>
+                          <div className="text-xs text-gray-400">{visit.patient.patientCode} · {visit.patient.phone}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={visit.currentState as PatientStatus} size="sm" />
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <div>{visit.room?.name ?? 'Chưa có phòng'}</div>
+                          <div className="text-xs text-gray-400">{visit.doctor?.name ?? 'Chưa có bác sĩ'}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {visit.priorityReason ? <PriorityBadge reason={visit.priorityReason as never} size="sm" /> : <span className="text-xs text-gray-400">Bình thường</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {filteredSchedules.map(schedule => (
-                  <div key={schedule.name} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{schedule.name}</p>
-                        <p className="text-xs text-gray-500">{schedule.department} • {schedule.time}</p>
-                      </div>
-                      <span className={clsx(
-                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
-                        schedule.status === 'Đang làm việc' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                        schedule.status === 'Tạm nghỉ' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                        'border-gray-200 bg-white text-gray-500'
-                      )}>
-                        {schedule.status}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center gap-2 text-xs font-medium text-gray-600">
-                      <ListChecks size={14} className="text-sky-600" />
-                      {schedule.waiting} bệnh nhân chờ
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
             )}
-          </div>
+          </>
+        )}
 
-          {showDetailPanel && (
-          <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{activeView === 'account' ? 'Tài khoản lễ tân' : 'Chi tiết bệnh nhân'}</p>
-                <h3 className="mt-1 text-lg font-bold text-gray-900">{selectedPatient.name}</h3>
-                <p className="text-sm text-gray-500">{selectedPatient.code} • STT {selectedPatient.stt}</p>
+        {activeView === 'queue' && (
+          <>
+            <SearchBar value={listSearch} onChange={setListSearch} placeholder="Tìm theo số thứ tự, bệnh nhân, phòng..." />
+            {queueItems.length === 0 ? (
+              <EmptyState title="Chưa có hàng đợi phù hợp" description="Thử thay đổi từ khóa tìm kiếm." />
+            ) : (
+              <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Số thứ tự</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Làn</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Trạng thái</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Phòng / Dịch vụ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queueItems.map(item => (
+                      <tr key={item.queueItemId} className="border-t border-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{item.queueNumber}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-gray-800">{item.patient.fullName}</div>
+                          <div className="text-xs text-gray-400">{item.patient.patientCode} · {item.patient.phone}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <LaneBadge lane={item.priority.laneType} size="sm" />
+                            {item.priority.priorityReason ? <PriorityBadge reason={item.priority.priorityReason as never} size="sm" /> : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                            {QUEUE_STATUS_LABELS[item.currentStatus] ?? item.currentStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <div>{item.room?.name ?? 'Chưa có phòng'}</div>
+                          <div className="text-xs text-gray-400">{item.service?.name ?? 'Chưa có dịch vụ'}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
-                <Ticket size={20} />
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 p-3">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-gray-500">Số điện thoại</p>
-                  <p className="font-semibold text-gray-800">{selectedPatient.phone}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Loại đăng ký</p>
-                  <p className="font-semibold text-gray-800">{selectedPatient.registrationType}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Chuyên khoa</p>
-                  <p className="font-semibold text-gray-800">{selectedPatient.department}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Số thứ tự</p>
-                  <p className="font-semibold text-gray-800">{selectedPatient.stt}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Bác sĩ / phòng khám dự kiến</p>
-                <p className="text-sm font-semibold text-gray-800">{selectedPatient.expectedDoctor} • {selectedPatient.room}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Thời gian chờ dự kiến</p>
-                <p className="text-sm font-semibold text-gray-800">{selectedPatient.expectedWait}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase text-gray-500">Trạng thái hiện tại</span>
-              <StatusBadge status={selectedPatient.status} />
-            </div>
-
-            <div className="mt-5">
-              <p className="mb-3 text-xs font-semibold uppercase text-gray-500">Timeline luồng bệnh nhân</p>
-              <div className="space-y-3">
-                {timeline.map((step, index) => (
-                  <TimelineStep
-                    key={step}
-                    label={step}
-                    active={index === currentTimelineIndex}
-                    done={index < currentTimelineIndex || selectedPatient.status === 'Hoàn tất'}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-2">
-              <p className="text-xs font-semibold uppercase text-gray-500">Ghi chú lễ tân</p>
-              <textarea
-                rows={4}
-                defaultValue={selectedPatient.note}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100"
-              />
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-2">
-              <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700">
-                <CalendarCheck size={16} />
-                Xác nhận lịch hẹn
-              </button>
-              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100">
-                <Ticket size={16} />
-                Cấp số thứ tự
-              </button>
-              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-100">
-                <ArrowRightLeft size={16} />
-                Điều phối phòng khám
-              </button>
-              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
-                <Printer size={16} />
-                In phiếu khám
-              </button>
-            </div>
-          </aside>
-          )}
-        </section>
+            )}
+          </>
+        )}
       </div>
     </Layout>
   );

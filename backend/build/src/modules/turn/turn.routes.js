@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.turnRouter = void 0;
+const express_1 = require("express");
+const turn_controller_1 = require("./turn.controller");
+exports.turnRouter = (0, express_1.Router)();
+exports.turnRouter.get('/', turn_controller_1.listTurns);
+exports.turnRouter.get('/:id', turn_controller_1.getTurnDetail);
+exports.turnRouter.patch('/:id/start', turn_controller_1.startTurnHandler);
+exports.turnRouter.patch('/:id/complete', turn_controller_1.completeTurnHandler);

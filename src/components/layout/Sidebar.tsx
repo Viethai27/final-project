@@ -5,6 +5,7 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardList,
+  CreditCard,
   FlaskConical,
   LayoutDashboard,
   ListOrdered,
@@ -32,12 +33,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Tiếp nhận', path: '/reception', icon: <ClipboardList size={18} />, roles: ['ADMIN', 'RECEPTIONIST', 'COORDINATOR'] },
   { label: 'Hàng đợi', path: '/queue', icon: <ListOrdered size={18} />, roles: ['ADMIN', 'COORDINATOR', 'RECEPTIONIST'] },
   { label: 'Điều phối', path: '/dispatch', icon: <ArrowRightLeft size={18} />, roles: ['ADMIN', 'COORDINATOR'] },
-  { label: 'Phòng Khám', path: '/doctor', icon: <Stethoscope size={18} />, roles: ['ADMIN'] },
-  { label: 'Cận Lâm Sàng', path: '/lab', icon: <FlaskConical size={18} />, roles: ['ADMIN', 'LAB_STAFF'] },
-  { label: 'Theo Dõi Lượt Khám', path: '/visit-tracking', icon: <Activity size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
-  { label: 'Giám Sát Tải', path: '/monitoring', icon: <Users size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
-  { label: 'Báo Cáo', path: '/reports', icon: <BarChart3 size={18} />, roles: ['ADMIN', 'MANAGER'] },
-  { label: 'Cài Đặt', path: '/settings', icon: <Settings size={18} />, roles: ['ADMIN'] },
+  { label: 'Phòng khám', path: '/doctor', icon: <Stethoscope size={18} />, roles: ['ADMIN'] },
+  { label: 'Cận lâm sàng', path: '/lab', icon: <FlaskConical size={18} />, roles: ['ADMIN', 'LAB_STAFF'] },
+  { label: 'Thanh toán', path: '/payment', icon: <CreditCard size={18} />, roles: ['ADMIN'] },
+  { label: 'Theo dõi lượt khám', path: '/visit-tracking', icon: <Activity size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
+  { label: 'Giám sát tải', path: '/monitoring', icon: <Users size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
+  { label: 'Báo cáo', path: '/reports', icon: <BarChart3 size={18} />, roles: ['ADMIN', 'MANAGER'] },
+  { label: 'Cài đặt', path: '/settings', icon: <Settings size={18} />, roles: ['ADMIN'] },
 ];
 
 const DOCTOR_NAV_ITEMS: NavItem[] = [
@@ -58,17 +60,18 @@ const RECEPTIONIST_NAV_ITEMS: NavItem[] = [
   { label: 'Danh sách bệnh nhân', path: '/reception?view=patients', icon: <Users size={18} />, roles: ['RECEPTIONIST'] },
   { label: 'Lịch làm việc bác sĩ', path: '/reception?view=doctors', icon: <Stethoscope size={18} />, roles: ['RECEPTIONIST'] },
   { label: 'Điều phối bệnh nhân', path: '/dispatch', icon: <ArrowRightLeft size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Thanh toán', path: '/payment', icon: <CreditCard size={18} />, roles: ['RECEPTIONIST'] },
   { label: 'Thông báo', path: '/reception?view=notifications', icon: <Bell size={18} />, roles: ['RECEPTIONIST'] },
   { label: 'Tài khoản', path: '/reception?view=account', icon: <UserCircle size={18} />, roles: ['RECEPTIONIST'] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  ADMIN: 'Quản Trị',
-  RECEPTIONIST: 'Lễ Tân',
-  COORDINATOR: 'Điều Phối',
-  DOCTOR: 'Bác Sĩ',
-  LAB_STAFF: 'Nhân Viên CLS',
-  MANAGER: 'Quản Lý',
+  ADMIN: 'Quản trị',
+  RECEPTIONIST: 'Lễ tân',
+  COORDINATOR: 'Điều phối',
+  DOCTOR: 'Bác sĩ',
+  LAB_STAFF: 'Nhân viên CLS',
+  MANAGER: 'Quản lý',
 };
 
 interface SidebarProps {
@@ -98,7 +101,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={clsx(
           'fixed top-0 left-0 z-30 h-full w-64 bg-slate-900 flex flex-col transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto',
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
@@ -108,7 +111,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </div>
             <div>
               <span className="text-white font-bold text-lg leading-none">PAMEC</span>
-              <p className="text-slate-400 text-xs">Điều Phối Bệnh Nhân</p>
+              <p className="text-slate-400 text-xs">Điều phối bệnh nhân</p>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
@@ -135,19 +138,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             <NavLink
               key={`${item.label}-${item.path}`}
               to={item.path}
-              onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+              onClick={() => {
+                if (window.innerWidth < 1024) onClose();
+              }}
               className={({ isActive }) => {
                 const currentPath = `${location.pathname}${location.search}`;
-                const active = user?.role === 'DOCTOR'
+                const queryScopedRole = user?.role === 'DOCTOR' || user?.role === 'RECEPTIONIST';
+                const active = queryScopedRole
                   ? currentPath === item.path
-                  : user?.role === 'RECEPTIONIST'
-                    ? currentPath === item.path || (item.label === 'Tiếp nhận bệnh nhân' && location.pathname === '/reception' && !location.hash)
                   : isActive || location.pathname === item.path;
                 return clsx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                   active
                     ? 'bg-sky-100 text-sky-800 shadow-sm'
-                    : 'text-slate-300 hover:bg-slate-700/70 hover:text-white'
+                    : 'text-slate-300 hover:bg-slate-700/70 hover:text-white',
                 );
               }}
             >
@@ -158,7 +162,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         <div className="px-4 py-3 border-t border-slate-700">
-          <p className="text-slate-500 text-xs text-center">MediFlow v1.0 • {new Date().toLocaleDateString('vi-VN')}</p>
+          <p className="text-slate-500 text-xs text-center">
+            MediFlow v1.0 - {new Date().toLocaleDateString('vi-VN')}
+          </p>
         </div>
       </aside>
     </>

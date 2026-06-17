@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.dispatchRouter = void 0;
+const express_1 = require("express");
+const dispatch_controller_1 = require("./dispatch.controller");
+exports.dispatchRouter = (0, express_1.Router)();
+exports.dispatchRouter.get('/suggestions', dispatch_controller_1.listDispatchSuggestions);
+exports.dispatchRouter.get('/suggestions/:visitId', dispatch_controller_1.getDispatchSuggestionDetail);
+exports.dispatchRouter.post('/decisions', dispatch_controller_1.createDispatchDecisionHandler);
+exports.dispatchRouter.get('/decisions', dispatch_controller_1.listDispatchDecisions);
+exports.dispatchRouter.get('/decisions/:id', dispatch_controller_1.getDispatchDecisionDetail);

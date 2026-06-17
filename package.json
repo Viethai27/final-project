@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:backend": "npm --prefix backend run dev",
+    "smoke:api": "node scripts/smoke-api.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

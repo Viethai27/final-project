@@ -6,16 +6,15 @@ import {
   Text, 
   Button, 
   Flex, 
-  Image, 
   Stack,
   Icon
 } from "@chakra-ui/react";
 import { FaUserMd, FaArrowRight } from "react-icons/fa";
+import { Link as RouterLink } from "react-router-dom";
 
 interface DoctorItem {
   id: number;
   name: string;
-  image: string;
   position: string;
   title: string;
   specialty: string;
@@ -27,7 +26,6 @@ const doctorsData: DoctorItem[] = [
   {
     id: 1,
     name: "BS. Phạm Hoài Nam",
-    image: "https://via.placeholder.com/150",
     position: "Bác sĩ CKI",
     title: "Chuyên khoa Nội Tổng Quát",
     specialty: "Nội Tổng Quát",
@@ -36,7 +34,6 @@ const doctorsData: DoctorItem[] = [
   {
     id: 2,
     name: "BS. Nguyễn Thu Hương",
-    image: "https://via.placeholder.com/150",
     position: "Bác sĩ CKII",
     title: "Chuyên khoa Tim Mạch",
     specialty: "Tim Mạch",
@@ -45,7 +42,6 @@ const doctorsData: DoctorItem[] = [
   {
     id: 3,
     name: "BS. Lê Đức Minh",
-    image: "https://via.placeholder.com/150",
     position: "Bác sĩ CKI",
     title: "Chuyên khoa Nhi",
     specialty: "Nhi Khoa",
@@ -54,7 +50,6 @@ const doctorsData: DoctorItem[] = [
   {
     id: 4,
     name: "BS. Hồ Thị Nga",
-    image: "https://via.placeholder.com/150",
     position: "Bác sĩ CKII",
     title: "Chuyên khoa Sản Phụ Khoa",
     specialty: "Sản Phụ Khoa",
@@ -84,20 +79,19 @@ export default function Doctors() {
             <Flex gap={6} align="start">
               {/* Doctor Image */}
               <Box
-                bg="gray.200"
+                bg="linear-gradient(135deg, #E6F4FF 0%, #C7E7FF 100%)"
                 borderRadius="16px"
-                overflow="hidden"
                 flexShrink={0}
                 w="150px"
                 h="180px"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                color="#228CCF"
+                border="1px solid"
+                borderColor="blue.100"
               >
-                <Image
-                  src={doctor.image}
-                  alt={doctor.name}
-                  objectFit="cover"
-                  w="100%"
-                  h="100%"
-                />
+                <Icon as={FaUserMd} boxSize={16} aria-label={doctor.name} />
               </Box>
 
               {/* Doctor Info */}
@@ -127,6 +121,8 @@ export default function Doctors() {
 
             {/* Appointment Button */}
             <Button
+              as={RouterLink}
+              to="/appointment"
               leftIcon={<FaArrowRight />}
               colorScheme="blue"
               bg="#2B6CB0"

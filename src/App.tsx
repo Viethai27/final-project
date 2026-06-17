@@ -15,6 +15,9 @@ import LabPage from './pages/LabPage';
 import VisitTrackingPage from './pages/VisitTrackingPage';
 import MonitoringPage from './pages/MonitoringPage';
 import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
+import ForbiddenPage from './pages/ForbiddenPage';
+import PaymentPage from './pages/PaymentPage';
 
 const ROLE_DEFAULT_PATH: Record<UserRole, string> = {
   ADMIN: '/dashboard',
@@ -32,17 +35,30 @@ function ProtectedRoute({
   children: React.ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm font-semibold text-gray-500">
+        Đang kiểm tra phiên đăng nhập...
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    const defaultPath = ROLE_DEFAULT_PATH[user.role];
-    return <Navigate to={defaultPath} replace />;
+    return <Navigate to="/forbidden" replace />;
   }
   return <>{children}</>;
 }
 
 function RootRedirect() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm font-semibold text-gray-500">
+        Đang kiểm tra phiên đăng nhập...
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user) return <Navigate to={ROLE_DEFAULT_PATH[user.role]} replace />;
   return <Navigate to="/login" replace />;
@@ -113,9 +129,17 @@ export default function App() {
           }
         />
         <Route
+          path="/payment"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'RECEPTIONIST']}>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/visit-tracking"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['ADMIN', 'COORDINATOR', 'MANAGER']}>
               <VisitTrackingPage />
             </ProtectedRoute>
           }
@@ -133,6 +157,22 @@ export default function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}>
               <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/forbidden"
+          element={
+            <ProtectedRoute>
+              <ForbiddenPage />
             </ProtectedRoute>
           }
         />

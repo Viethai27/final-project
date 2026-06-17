@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.clsRouter = void 0;
+const express_1 = require("express");
+const cls_controller_1 = require("./cls.controller");
+exports.clsRouter = (0, express_1.Router)();
+exports.clsRouter.post('/orders', cls_controller_1.createClsOrderHandler);
+exports.clsRouter.get('/orders', cls_controller_1.listClsOrders);
+exports.clsRouter.get('/orders/:id', cls_controller_1.getClsOrderDetail);
+exports.clsRouter.patch('/orders/:id/start', cls_controller_1.startClsOrderHandler);
+exports.clsRouter.patch('/orders/:id/complete', cls_controller_1.completeClsOrderHandler);
+exports.clsRouter.get('/results', cls_controller_1.listClsResults);
+exports.clsRouter.get('/results/:id', cls_controller_1.getClsResultDetail);

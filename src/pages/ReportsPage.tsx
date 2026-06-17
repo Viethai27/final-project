@@ -1,263 +1,526 @@
-import { useState } from 'react';
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell
-} from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, FileText, Search, ShieldAlert, Users } from 'lucide-react';
 import Layout from '../components/layout/Layout';
-import { useHospital } from '../context/HospitalContext';
-import { PATIENT_FLOW_CHART_DATA, WAIT_TIME_CHART_DATA, DEPARTMENT_STATS } from '../data/mockData';
-import { Download, Filter, Calendar } from 'lucide-react';
+import { ErrorState, EmptyState, LoadingState } from '../components/common/PageState';
+import { dashboardApi } from '../services/dashboardApi';
+import { visitApi } from '../services/visitApi';
+import { queueApi } from '../services/queueApi';
+import { doctorApi } from '../services/doctorApi';
+import { serviceApi } from '../services/serviceApi';
+import { clsApi } from '../services/clsApi';
+import { dispatchApi } from '../services/dispatchApi';
+import type {
+  DashboardOverviewDto,
+  DoctorDto,
+  DispatchDecisionSummaryDto,
+  QueueItemSummaryDto,
+  ServiceDto,
+  VisitListItemDto,
+  CLSOrderSummaryDto,
+  CLSResultSummaryDto,
+} from '../services/backend-types';
+import { formatDateTime } from '../lib/format';
+import StatusBadge from '../components/ui/StatusBadge';
+import { LaneBadge } from '../components/ui/PriorityBadge';
+import type { PatientStatus } from '../types';
+import { clsx } from 'clsx';
 
-const COLORS = ['#0ea5e9', '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const VISIT_ACTIVE_STATUSES: PatientStatus[] = [
+  'WAITING_EXAM',
+  'IN_EXAM',
+  'WAITING_CLS',
+  'IN_CLS',
+  'WAITING_RESULT',
+  'WAITING_CONCLUSION',
+  'IN_CONCLUSION',
+  'WAITING_PAYMENT',
+];
+
+function StatCard({ label, value, sub, accent }: { label: string; value: number | string; sub: string; accent: string }) {
+  return (
+    <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className={clsx('mt-2 text-3xl font-black', accent)}>{value}</p>
+      <p className="mt-1 text-xs text-gray-400">{sub}</p>
+    </div>
+  );
+}
+
+function SimpleTable({
+  title,
+  description,
+  children,
+  right,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{title}</p>
+          <p className="mt-1 text-xs text-gray-500">{description}</p>
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function VisitRow({ visit }: { visit: VisitListItemDto }) {
+  return (
+    <tr className="border-t border-gray-50 hover:bg-gray-50/70">
+      <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{visit.queueNumber}</td>
+      <td className="px-4 py-3">
+        <div className="font-semibold text-gray-800">{visit.patient.fullName}</div>
+        <div className="text-xs text-gray-400">{visit.patient.patientCode} · {visit.patient.phone}</div>
+      </td>
+      <td className="px-4 py-3">
+        <StatusBadge status={visit.currentState as PatientStatus} size="sm" />
+      </td>
+      <td className="px-4 py-3 text-gray-600">
+        <div>{visit.room?.name ?? 'Chưa có'}</div>
+        <div className="text-xs text-gray-400">{visit.doctor?.name ?? 'Chưa có'}</div>
+      </td>
+      <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(visit.createdAt)}</td>
+    </tr>
+  );
+}
+
+function QueueRow({ item }: { item: QueueItemSummaryDto }) {
+  return (
+    <tr className="border-t border-gray-50 hover:bg-gray-50/70">
+      <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{item.queueNumber}</td>
+      <td className="px-4 py-3">
+        <div className="font-semibold text-gray-800">{item.patient.fullName}</div>
+        <div className="text-xs text-gray-400">{item.patient.patientCode}</div>
+      </td>
+      <td className="px-4 py-3">
+        <LaneBadge lane={item.priority.laneType} size="sm" />
+      </td>
+      <td className="px-4 py-3 text-gray-600">{item.room?.name ?? 'Chưa có'}</td>
+      <td className="px-4 py-3 text-xs text-gray-500">{item.waitingTimeMinutes} phút</td>
+    </tr>
+  );
+}
+
+function ResultRow({ result }: { result: CLSResultSummaryDto }) {
+  return (
+    <tr className="border-t border-gray-50 hover:bg-gray-50/70">
+      <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{result.clsResultId}</td>
+      <td className="px-4 py-3">
+        <div className="font-semibold text-gray-800">{result.clsOrder.visit.patient.fullName}</div>
+        <div className="text-xs text-gray-400">{result.clsOrder.visit.queueNumber}</div>
+      </td>
+      <td className="px-4 py-3">
+        <span className={clsx(
+          'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
+          result.clsOrder.status === 'COMPLETED'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : result.clsOrder.status === 'IN_PROGRESS'
+              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+              : result.clsOrder.status === 'ASSIGNED'
+                ? 'border-sky-200 bg-sky-50 text-sky-700'
+                : result.clsOrder.status === 'CANCELLED'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border-gray-200 bg-gray-50 text-gray-600',
+        )}>
+          {result.clsOrder.status}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-gray-600">
+        {result.clsOrder.service?.name ?? 'Chưa có'}
+      </td>
+      <td className="px-4 py-3 text-xs text-gray-500">{result.isAbnormal ? 'Bất thường' : 'Bình thường'}</td>
+    </tr>
+  );
+}
+
+function DecisionRow({ decision }: { decision: DispatchDecisionSummaryDto }) {
+  return (
+    <tr className="border-t border-gray-50 hover:bg-gray-50/70">
+      <td className="px-4 py-3 font-mono text-xs font-black text-sky-700">{decision.dispatchDecisionId}</td>
+      <td className="px-4 py-3">
+        <div className="font-semibold text-gray-800">{decision.visit.patient.fullName}</div>
+        <div className="text-xs text-gray-400">{decision.visit.queueNumber}</div>
+      </td>
+      <td className="px-4 py-3 text-gray-600">{decision.outcomeRoom?.name ?? 'Chưa có'}</td>
+      <td className="px-4 py-3 text-gray-600">{decision.outcomeDoctor?.name ?? 'Chưa có'}</td>
+      <td className="px-4 py-3 text-xs text-gray-500">{decision.decisionType}</td>
+    </tr>
+  );
+}
 
 export default function ReportsPage() {
-  const { visits, rooms, clsOrders, dashboardStats } = useHospital();
+  const [overview, setOverview] = useState<DashboardOverviewDto | null>(null);
+  const [visits, setVisits] = useState<VisitListItemDto[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItemSummaryDto[]>([]);
+  const [doctors, setDoctors] = useState<DoctorDto[]>([]);
+  const [services, setServices] = useState<ServiceDto[]>([]);
+  const [clsOrders, setClsOrders] = useState<CLSOrderSummaryDto[]>([]);
+  const [clsResults, setClsResults] = useState<CLSResultSummaryDto[]>([]);
+  const [dispatchDecisions, setDispatchDecisions] = useState<DispatchDecisionSummaryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
-  const [activeTab, setActiveTab] = useState<'flow' | 'wait' | 'dept' | 'cls'>('flow');
+  useEffect(() => {
+    let active = true;
 
-  const completedVisits = visits.filter(v => v.status === 'COMPLETED');
-  const cancelledVisits = visits.filter(v => v.status === 'CANCELLED');
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const [
+          overviewRes,
+          visitRes,
+          queueRes,
+          doctorRes,
+          serviceRes,
+          clsOrderRes,
+          clsResultRes,
+          decisionRes,
+        ] = await Promise.all([
+          dashboardApi.getOverview(),
+          visitApi.list({ limit: 200, page: 1, sort: 'desc' }),
+          queueApi.list({ limit: 200, page: 1, sort: 'desc' }),
+          doctorApi.list({ limit: 200, page: 1, sort: 'desc' }),
+          serviceApi.list({ limit: 200, page: 1, sort: 'desc' }),
+          clsApi.listOrders({ limit: 200, page: 1, sort: 'desc' }),
+          clsApi.listResults({ limit: 200, page: 1, sort: 'desc' }),
+          dispatchApi.listDecisions({ limit: 200, page: 1, sort: 'desc' }),
+        ]);
 
-  // CLS stats
-  const completedOrders = clsOrders.filter(o => o.status === 'COMPLETED');
-  const pendingOrders = clsOrders.filter(o => o.status === 'PENDING');
-  const inProgressOrders = clsOrders.filter(o => o.status === 'IN_PROGRESS');
+        if (!active) return;
 
-  // Room type distribution
-  const roomTypeCounts = [
-    { name: 'Phòng khám', value: rooms.filter(r => r.type === 'EXAM').length },
-    { name: 'Xét nghiệm', value: rooms.filter(r => r.type === 'LAB').length },
-    { name: 'Chẩn đoán hình ảnh', value: rooms.filter(r => r.type === 'IMAGING').length },
-  ];
+        setOverview(overviewRes.data);
+        setVisits(visitRes.data);
+        setQueueItems(queueRes.data);
+        setDoctors(doctorRes.data);
+        setServices(serviceRes.data);
+        setClsOrders(clsOrderRes.data);
+        setClsResults(clsResultRes.data);
+        setDispatchDecisions(decisionRes.data);
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Không tải được báo cáo.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
 
-  // Load distribution
-  const loadDist = [
-    { name: 'Bình thường', value: rooms.filter(r => r.loadLevel === 'NORMAL').length, fill: '#10b981' },
-    { name: 'Cảnh báo', value: rooms.filter(r => r.loadLevel === 'WARNING').length, fill: '#f59e0b' },
-    { name: 'Quá tải', value: rooms.filter(r => r.loadLevel === 'OVERLOAD').length, fill: '#ef4444' },
-  ];
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const statusPieData = [
-    { name: 'Hoàn tất', value: completedVisits.length },
-    { name: 'Đang khám', value: visits.filter(v => ['IN_EXAM', 'WAITING_EXAM'].includes(v.status)).length },
-    { name: 'Đang CLS', value: visits.filter(v => ['IN_CLS', 'WAITING_CLS', 'WAITING_CONCLUSION'].includes(v.status)).length },
-    { name: 'Chờ TT', value: visits.filter(v => v.status === 'WAITING_PAYMENT').length },
-    { name: 'Đã hủy', value: cancelledVisits.length },
-  ];
+  const filteredVisits = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return visits;
+    return visits.filter(visit =>
+      [visit.queueNumber, visit.patient.fullName, visit.patient.patientCode, visit.doctor?.name ?? '', visit.room?.name ?? '']
+        .join(' ')
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [search, visits]);
 
-  const KPI_DATA = [
-    { label: 'Tổng lượt khám', value: visits.length, sub: 'Hôm nay', color: 'text-sky-600' },
-    { label: 'Hoàn tất', value: completedVisits.length, sub: `${Math.round((completedVisits.length / Math.max(visits.length, 1)) * 100)}% tổng số`, color: 'text-green-600' },
-    { label: 'TG chờ TB', value: `${dashboardStats.avgWaitMinutes}ph`, sub: 'Toàn bệnh viện', color: dashboardStats.avgWaitMinutes > 45 ? 'text-red-600' : 'text-sky-600' },
-    { label: 'Chỉ định CLS', value: clsOrders.length, sub: `${completedOrders.length} hoàn thành`, color: 'text-purple-600' },
-    { label: 'Điều phối hôm nay', value: dashboardStats.dispatchCount, sub: 'Số lần điều chuyển', color: 'text-indigo-600' },
-    { label: 'Phòng quá tải', value: dashboardStats.overloadedRooms, sub: `/ ${rooms.length} phòng`, color: dashboardStats.overloadedRooms > 0 ? 'text-red-600' : 'text-green-600' },
-  ];
+  const activeVisits = visits.filter(visit => VISIT_ACTIVE_STATUSES.includes(visit.currentState as PatientStatus));
+  const completedVisits = visits.filter(visit => visit.currentState === 'COMPLETED');
+  const waitingVisits = visits.filter(visit => ['WAITING_EXAM', 'WAITING_CLS', 'WAITING_RESULT', 'WAITING_CONCLUSION', 'WAITING_PAYMENT'].includes(visit.currentState));
+  const activeQueueCount = queueItems.filter(item => !['DONE', 'CANCELLED'].includes(item.status.currentStatus)).length;
+
+  const visitStatusCounts = useMemo(() => {
+    return visits.reduce<Record<string, number>>((acc, visit) => {
+      acc[visit.currentState] = (acc[visit.currentState] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [visits]);
+
+  const clsStatusCounts = useMemo(() => {
+    return clsOrders.reduce<Record<string, number>>((acc, order) => {
+      acc[order.status] = (acc[order.status] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [clsOrders]);
+
+  const doctorCounts = useMemo(() => {
+    return visits.reduce<Record<string, number>>((acc, visit) => {
+      if (!visit.doctor?.name) return acc;
+      acc[visit.doctor.name] = (acc[visit.doctor.name] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [visits]);
+
+  const serviceCounts = useMemo(() => {
+    return clsOrders.reduce<Record<string, number>>((acc, order) => {
+      const name = order.service?.name ?? 'Không rõ';
+      acc[name] = (acc[name] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [clsOrders]);
+
+  const topDoctors = useMemo(
+    () => Object.entries(doctorCounts).sort((left, right) => right[1] - left[1]).slice(0, 5),
+    [doctorCounts],
+  );
+
+  const topServices = useMemo(
+    () => Object.entries(serviceCounts).sort((left, right) => right[1] - left[1]).slice(0, 5),
+    [serviceCounts],
+  );
+
+  if (loading) {
+    return (
+      <Layout pageTitle="Báo Cáo">
+        <LoadingState label="Đang tải báo cáo thật từ backend..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout pageTitle="Báo Cáo">
+        <ErrorState message={error} onRetry={() => window.location.reload()} />
+      </Layout>
+    );
+  }
 
   return (
-    <Layout pageTitle="Báo Cáo & Thống Kê">
+    <Layout pageTitle="Báo Cáo">
       <div className="space-y-5">
-        {/* Toolbar */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Calendar size={16} className="text-gray-400" />
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {([['today', 'Hôm nay'], ['week', '7 ngày'], ['month', '30 ngày']] as const).map(([val, label]) => (
-                <button key={val} onClick={() => setDateRange(val)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${dateRange === val ? 'bg-white text-sky-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  {label}
-                </button>
-              ))}
+        <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Báo cáo vận hành</p>
+              <p className="text-xs text-gray-500">Dữ liệu tổng hợp từ dashboard, visits, queue, CLS và dispatch</p>
             </div>
-          </div>
-          <button className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700">
-            <Download size={14} />
-            Xuất Báo Cáo
-          </button>
-        </div>
-
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {KPI_DATA.map(kpi => (
-            <div key={kpi.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-              <p className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</p>
-              <p className="text-xs font-semibold text-gray-700 mt-1">{kpi.label}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{kpi.sub}</p>
+            <div className="relative ml-auto min-w-[240px] flex-1 md:flex-none">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Tìm kiếm lượt khám..."
+                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+              />
             </div>
-          ))}
-        </div>
-
-        {/* Chart tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          {([
-            ['flow', 'Luồng BN'],
-            ['wait', 'Thời Gian'],
-            ['dept', 'Theo Khoa'],
-            ['cls', 'CLS & Trạng Thái'],
-          ] as const).map(([tab, label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors ${activeTab === tab ? 'bg-white text-sky-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              {label}
+            <button className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">
+              <Download size={14} />
+              Xuất báo cáo
             </button>
-          ))}
+          </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-5">
-          {/* Main chart */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
-            {activeTab === 'flow' && (
-              <>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Luồng Bệnh Nhân Theo Giờ</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={PATIENT_FLOW_CHART_DATA}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="time" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="check_in" name="Check-in" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="completed" name="Hoàn tất" stroke="#10b981" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="waiting" name="Đang chờ" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </>
-            )}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <StatCard label="Tổng lượt khám" value={overview?.totalVisits ?? visits.length} sub="Từ /dashboard/overview" accent="text-sky-600" />
+          <StatCard label="Lượt hoàn thành" value={completedVisits.length} sub="COMPLETED" accent="text-emerald-600" />
+          <StatCard label="Lượt đang chờ" value={waitingVisits.length} sub="Active visits" accent="text-amber-600" />
+          <StatCard label="Hàng đợi hoạt động" value={activeQueueCount} sub="Từ /queue" accent="text-indigo-600" />
+          <StatCard label="CLS order" value={clsOrders.length} sub="Orders tổng" accent="text-purple-600" />
+          <StatCard label="Dispatch decision" value={dispatchDecisions.length} sub="Từ /dispatch/decisions" accent="text-rose-600" />
+        </div>
 
-            {activeTab === 'wait' && (
-              <>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Thời Gian Chờ & Khám Theo Ngày</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={WAIT_TIME_CHART_DATA}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} unit=" ph" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="avg_wait" name="TG chờ TB" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="avg_service" name="TG khám TB" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="max_wait" name="TG chờ max" fill="#fbbf24" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            )}
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-4">
+            <SimpleTable
+              title="Lượt khám gần đây"
+              description={`Đang hiển thị ${filteredVisits.length} lượt khám từ backend`}
+              right={<Users className="text-gray-400" size={18} />}
+            >
+              {filteredVisits.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Không có lượt khám phù hợp" description="Thử thay đổi ô tìm kiếm." />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Lượt</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Trạng thái</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Phòng</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Tạo lúc</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredVisits.slice(0, 8).map(visit => <VisitRow key={visit.visitId} visit={visit} />)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SimpleTable>
 
-            {activeTab === 'dept' && (
-              <>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Thống Kê Theo Khoa</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={DEPARTMENT_STATS} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="dept" tick={{ fontSize: 11 }} width={60} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="patients" name="Số BN" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
-                    <Bar dataKey="avgWait" name="Chờ TB (ph)" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            )}
+            <SimpleTable
+              title="Danh sách queue đang hoạt động"
+              description={`${activeQueueCount} queue item đang xử lý`}
+              right={<ShieldAlert className="text-gray-400" size={18} />}
+            >
+              {queueItems.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Không có queue item" description="Backend hiện không trả về queue nào." />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Queue</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Làn</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Phòng</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Chờ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {queueItems.slice(0, 8).map(item => <QueueRow key={item.queueItemId} item={item} />)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SimpleTable>
 
-            {activeTab === 'cls' && (
-              <>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Trạng Thái CLS</h3>
-                <div className="grid grid-cols-3 gap-3 mb-5">
-                  {[
-                    { label: 'Chờ thực hiện', count: pendingOrders.length, color: 'text-gray-600' },
-                    { label: 'Đang thực hiện', count: inProgressOrders.length, color: 'text-violet-600' },
-                    { label: 'Hoàn thành', count: completedOrders.length, color: 'text-green-600' },
-                  ].map(item => (
-                    <div key={item.label} className="text-center p-3 bg-gray-50 rounded-lg">
-                      <p className={`text-xl font-bold ${item.color}`}>{item.count}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
+            <SimpleTable
+              title="Kết quả CLS"
+              description={`${clsResults.length} kết quả lấy từ backend`}
+              right={<FileText className="text-gray-400" size={18} />}
+            >
+              {clsResults.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Chưa có kết quả CLS" description="Không có kết quả để báo cáo." />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Result</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Order</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Dịch vụ</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Đánh dấu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clsResults.slice(0, 8).map(result => <ResultRow key={result.clsResultId} result={result} />)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SimpleTable>
+          </div>
+
+          <div className="space-y-4">
+            <SimpleTable
+              title="Phân bố trạng thái lượt khám"
+              description="Tính từ /visits"
+              right={<Users className="text-gray-400" size={18} />}
+            >
+              <div className="grid grid-cols-2 gap-3 p-5">
+                {Object.entries(visitStatusCounts)
+                  .sort((left, right) => right[1] - left[1])
+                  .map(([status, count]) => (
+                    <div key={status} className="rounded-2xl bg-gray-50 p-4">
+                      <p className="text-xs text-gray-500">{status}</p>
+                      <p className="mt-1 text-2xl font-black text-gray-800">{count}</p>
+                    </div>
+                  ))}
+              </div>
+            </SimpleTable>
+
+            <SimpleTable
+              title="CLS theo trạng thái"
+              description="Tính từ /cls/orders"
+              right={<FileText className="text-gray-400" size={18} />}
+            >
+              <div className="grid grid-cols-2 gap-3 p-5">
+                {Object.entries(clsStatusCounts)
+                  .sort((left, right) => right[1] - left[1])
+                  .map(([status, count]) => (
+                    <div key={status} className="rounded-2xl bg-gray-50 p-4">
+                      <p className="text-xs text-gray-500">{status}</p>
+                      <p className="mt-1 text-2xl font-black text-gray-800">{count}</p>
+                    </div>
+                  ))}
+              </div>
+            </SimpleTable>
+
+            <SimpleTable
+              title="Top bác sĩ"
+              description="Đếm từ lượt khám đã tải"
+              right={<Users className="text-gray-400" size={18} />}
+            >
+              {topDoctors.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Chưa có bác sĩ" description="Không đủ dữ liệu để thống kê." />
+                </div>
+              ) : (
+                <div className="space-y-2 p-5">
+                  {topDoctors.map(([name, count]) => (
+                    <div key={name} className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 text-sm">
+                      <span className="font-medium text-gray-800">{name}</span>
+                      <span className="font-bold text-sky-700">{count}</span>
                     </div>
                   ))}
                 </div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={[
-                    { name: 'Xét nghiệm', pending: 3, inProgress: 2, completed: 4 },
-                    { name: 'Hình ảnh', pending: 2, inProgress: 1, completed: 3 },
-                    { name: 'Điện tim', pending: 1, inProgress: 0, completed: 1 },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="pending" name="Chờ" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="inProgress" name="Đang làm" stackId="a" fill="#8b5cf6" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="completed" name="Xong" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            )}
-          </div>
+              )}
+            </SimpleTable>
 
-          {/* Side charts */}
-          <div className="space-y-4">
-            {/* Status pie */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Phân Bố Trạng Thái</h3>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70}
-                    dataKey="value" nameKey="name" paddingAngle={2}>
-                    {statusPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1 mt-2">
-                {statusPieData.filter(d => d.value > 0).map((d, i) => (
-                  <div key={d.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                      <span className="text-gray-600">{d.name}</span>
+            <SimpleTable
+              title="Top dịch vụ CLS"
+              description="Đếm theo service trong CLS orders"
+              right={<FileText className="text-gray-400" size={18} />}
+            >
+              {topServices.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Chưa có dịch vụ CLS" description="Không đủ dữ liệu để thống kê." />
+                </div>
+              ) : (
+                <div className="space-y-2 p-5">
+                  {topServices.map(([name, count]) => (
+                    <div key={name} className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 text-sm">
+                      <span className="font-medium text-gray-800">{name}</span>
+                      <span className="font-bold text-purple-700">{count}</span>
                     </div>
-                    <span className="font-semibold text-gray-800">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+                  ))}
+                </div>
+              )}
+            </SimpleTable>
 
-            {/* Load distribution */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Tình Trạng Phòng</h3>
-              <div className="space-y-2">
-                {loadDist.map(item => (
-                  <div key={item.name} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.fill }} />
-                      {item.name}
-                    </div>
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ backgroundColor: item.fill, width: `${(item.value / rooms.length) * 100}%` }} />
-                    </div>
-                    <span className="text-xs font-semibold text-gray-700 w-4 text-right">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top rooms by waiting */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Top Phòng Đông Nhất</h3>
-              <div className="space-y-2">
-                {[...rooms].sort((a, b) => b.currentWaiting - a.currentWaiting).slice(0, 5).map(room => (
-                  <div key={room.id} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-gray-600 flex-1 truncate">{room.name}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${room.loadLevel === 'OVERLOAD' ? 'bg-red-500' : room.loadLevel === 'WARNING' ? 'bg-amber-400' : 'bg-green-400'}`}
-                          style={{ width: `${Math.min(100, (room.currentWaiting / room.capacity) * 100)}%` }} />
-                      </div>
-                      <span className="font-semibold text-gray-700 w-8 text-right">{room.currentWaiting}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SimpleTable
+              title="Dispatch decisions"
+              description={`${dispatchDecisions.length} quyết định điều phối`}
+              right={<ShieldAlert className="text-gray-400" size={18} />}
+            >
+              {dispatchDecisions.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Chưa có quyết định điều phối" description="Backend hiện chưa có dữ liệu." />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Decision</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bệnh nhân</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Phòng</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Bác sĩ</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Loại</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dispatchDecisions.slice(0, 8).map(decision => <DecisionRow key={decision.dispatchDecisionId} decision={decision} />)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SimpleTable>
           </div>
         </div>
       </div>

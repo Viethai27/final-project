@@ -1,0 +1,870 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  RECEPTIONIST
+  COORDINATOR
+  DOCTOR
+  LAB_STAFF
+  MANAGER
+  PATIENT
+}
+
+enum RoomType {
+  EXAM
+  LAB
+  IMAGING
+  OTHER
+}
+
+enum ServiceType {
+  EXAM
+  LAB
+  IMAGING
+  OTHER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  LATE
+  NO_SHOW
+  CANCELLED
+}
+
+enum PatientStatus {
+  WAITING_EXAM
+  IN_EXAM
+  WAITING_CLS
+  IN_CLS
+  WAITING_RESULT
+  WAITING_CONCLUSION
+  IN_CONCLUSION
+  WAITING_PAYMENT
+  COMPLETED
+  CANCELLED
+}
+
+enum QueueLane {
+  APPOINTMENT
+  AFTER_CLS
+  PRIORITY
+  NORMAL
+}
+
+enum PriorityReason {
+  EMERGENCY
+  CHILD_UNDER_6
+  PREGNANT
+  DISABLED
+  HEAVY_DISABLED
+  ELDERLY_75PLUS
+  REVOLUTIONARY_CONTRIBUTOR
+  AFTER_CLS
+  APPOINTMENT
+  OTHER
+}
+
+enum QueueType {
+  EXAM
+  CLS
+  CONCLUSION
+  PAYMENT
+}
+
+enum QueueStatus {
+  WAITING
+  CALLED
+  SERVING
+  DONE
+  TIMEOUT
+  CANCELLED
+}
+
+enum TurnType {
+  CLINICAL_EXAM
+  CLS_LAB
+  CLS_IMAGING
+  CONCLUSION
+  PAYMENT
+}
+
+enum TurnStatus {
+  PENDING
+  CALLED
+  IN_PROGRESS
+  COMPLETED
+  TIMEOUT
+  CANCELLED
+}
+
+enum CLSPriority {
+  ROUTINE
+  URGENT
+}
+
+enum CLSOrderStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AlertLevel {
+  NORMAL
+  WARNING
+  OVERLOAD
+}
+
+enum DecisionType {
+  SYSTEM_SUGGESTED
+  MANUAL
+  OVERRIDE
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users   User[]
+  doctors DoctorProfile[]
+  rooms   Room[]
+
+  @@index([isActive])
+  @@map("departments")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  fullName     String
+  email        String?   @unique
+  role         UserRole
+  departmentId String?
+  isActive     Boolean   @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  department              Department?         @relation(fields: [departmentId], references: [id])
+  doctorProfile           DoctorProfile?
+  createdVisits           Visit[]             @relation("VisitCreatedBy")
+  triggeredStateHistories VisitStateHistory[] @relation("VisitStateTriggeredBy")
+  queueItems              QueueItem[]         @relation("QueueItemCreatedBy")
+  queueItemStatuses       QueueItemStatus[]   @relation("QueueItemStatusUpdatedBy")
+  queueItemHistories      QueueItemHistory[]  @relation("QueueItemHistoryTriggeredByUser")
+  turns                   Turn[]              @relation("TurnCreatedBy")
+  turnProgressUpdates     TurnProgress[]      @relation("TurnProgressUpdatedBy")
+  clsResults              CLSResult[]         @relation("CLSResultResultBy")
+  dispatchDecisions       DispatchDecision[]  @relation("DispatchDecisionBy")
+  visitProgressUpdates    VisitProgress[]     @relation("VisitProgressUpdatedBy")
+  visitAssignments        VisitAssignment[]   @relation("VisitAssignmentAssignedBy")
+  escalations             EscalationLog[]     @relation("EscalationBy")
+
+  @@index([role])
+  @@index([departmentId])
+  @@index([isActive])
+  @@map("users")
+}
+
+model DoctorProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  name          String
+  specialty     String?
+  departmentId  String?
+  defaultRoomId String?
+  licenseNumber String?  @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user                                   User               @relation(fields: [userId], references: [id])
+  department                             Department?        @relation(fields: [departmentId], references: [id])
+  defaultRoom                            Room?              @relation("DoctorProfileDefaultRoom", fields: [defaultRoomId], references: [id])
+  schedules                              WorkSchedule[]
+  appointments                           Appointment[]      @relation("AppointmentDoctor")
+  assignments                            VisitAssignment[]  @relation("VisitAssignmentDoctor")
+  clsOrders                              CLSOrder[]         @relation("CLSOrderOrderedBy")
+  turns                                  Turn[]             @relation("TurnDoctor")
+  targetQueueItems                       QueueItem[]        @relation("QueueItemTargetDoctor")
+  dispatchRecommendationsAsOutcomeDoctor DispatchDecision[] @relation("DispatchDecisionOutcomeDoctor")
+
+  @@index([departmentId])
+  @@index([defaultRoomId])
+  @@index([isActive])
+  @@map("doctor_profiles")
+}
+
+model WorkSchedule {
+  id          String   @id @default(cuid())
+  doctorId    String
+  roomId      String
+  workDate    DateTime @db.Date
+  shift       String
+  startTime   String
+  endTime     String
+  maxPatients Int?
+  isActive    Boolean  @default(true)
+  note        String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  doctor       DoctorProfile @relation(fields: [doctorId], references: [id])
+  room         Room          @relation(fields: [roomId], references: [id])
+  appointments Appointment[] @relation("AppointmentSchedule")
+
+  @@unique([doctorId, roomId, workDate, shift])
+  @@index([doctorId, workDate])
+  @@index([roomId, workDate])
+  @@index([isActive])
+  @@map("work_schedules")
+}
+
+model Room {
+  id             String   @id @default(cuid())
+  departmentId   String
+  name           String
+  code           String   @unique
+  roomType       RoomType
+  capacity       Int?
+  avgServiceTime Float?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  department                   Department               @relation(fields: [departmentId], references: [id])
+  serviceRooms                 ServiceRoom[]
+  schedules                    WorkSchedule[]
+  appointments                 Appointment[]
+  doctorProfilesAsDefault      DoctorProfile[]          @relation("DoctorProfileDefaultRoom")
+  targetQueueItems             QueueItem[]              @relation("QueueItemTargetRoom")
+  turns                        Turn[]
+  resourceLoads                ResourceLoad[]
+  queueSnapshots               QueueSnapshot[]
+  dispatchRecommendations      DispatchRecommendation[]
+  visitAssignments             VisitAssignment[]
+  clsOrders                    CLSOrder[]
+  dispatchDecisionsOutcomeRoom DispatchDecision[]       @relation("DispatchDecisionOutcomeRoom")
+
+  @@index([departmentId])
+  @@index([roomType])
+  @@index([isActive])
+  @@map("rooms")
+}
+
+model ServiceCatalog {
+  id               String      @id @default(cuid())
+  name             String
+  code             String      @unique
+  serviceType      ServiceType
+  roomTypeRequired RoomType?
+  isUrgentCls      Boolean     @default(false)
+  targetWaitTime   Int?
+  avgDuration      Float?
+  price            Decimal?    @db.Decimal(14, 2)
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  serviceRooms     ServiceRoom[]
+  appointments     Appointment[]
+  clsOrders        CLSOrder[]
+  turns            Turn[]
+  invoiceItems     InvoiceItem[]
+  dispatchOutcomes DispatchOutcome[]
+
+  @@index([serviceType])
+  @@index([roomTypeRequired])
+  @@index([isActive])
+  @@map("service_catalogs")
+}
+
+model ServiceRoom {
+  id        String   @id @default(cuid())
+  serviceId String
+  roomId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service ServiceCatalog @relation(fields: [serviceId], references: [id])
+  room    Room           @relation(fields: [roomId], references: [id])
+
+  @@unique([serviceId, roomId])
+  @@index([roomId])
+  @@map("service_rooms")
+}
+
+model Patient {
+  id              String    @id @default(cuid())
+  patientCode     String    @unique
+  fullName        String
+  gender          String?
+  dateOfBirth     DateTime? @db.Date
+  age             Int?
+  idNumber        String?   @unique
+  phone           String?
+  address         String?
+  insuranceNumber String?
+  isDisabledHeavy Boolean   @default(false)
+  isDisabled      Boolean   @default(false)
+  isRevolutionary Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  appointments Appointment[]
+  visits       Visit[]
+
+  @@index([patientCode])
+  @@index([idNumber])
+  @@index([phone])
+  @@index([fullName])
+  @@map("patients")
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  patientId       String
+  doctorId        String?
+  roomId          String?
+  scheduleId      String?
+  appointmentTime DateTime
+  serviceId       String?
+  status          AppointmentStatus
+  note            String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  patient  Patient         @relation(fields: [patientId], references: [id])
+  doctor   DoctorProfile?  @relation("AppointmentDoctor", fields: [doctorId], references: [id])
+  room     Room?           @relation(fields: [roomId], references: [id])
+  schedule WorkSchedule?   @relation("AppointmentSchedule", fields: [scheduleId], references: [id])
+  service  ServiceCatalog? @relation(fields: [serviceId], references: [id])
+  visit    Visit?          @relation("AppointmentVisit")
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([roomId])
+  @@index([scheduleId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([appointmentTime])
+  @@map("appointments")
+}
+
+model Visit {
+  id                String          @id @default(cuid())
+  patientId         String
+  appointmentId     String?         @unique
+  visitDate         DateTime        @db.Date
+  queueNumber       String?
+  chiefComplaint    String?         @db.Text
+  isUrgent          Boolean         @default(false)
+  isPregnantAtVisit Boolean         @default(false)
+  priorityReason    PriorityReason?
+  arrivedAt         DateTime?
+  checkedInAt       DateTime?
+  createdAt         DateTime        @default(now())
+  createdById       String?
+
+  patient           Patient             @relation(fields: [patientId], references: [id])
+  appointment       Appointment?        @relation("AppointmentVisit", fields: [appointmentId], references: [id])
+  createdBy         User?               @relation("VisitCreatedBy", fields: [createdById], references: [id])
+  progress          VisitProgress?
+  stateHistories    VisitStateHistory[]
+  clinical          VisitClinical?
+  assignments       VisitAssignment[]
+  queueItems        QueueItem[]
+  turns             Turn[]
+  clsOrders         CLSOrder[]
+  dispatchDecisions DispatchDecision[]
+  escalationLogs    EscalationLog[]
+  invoice           Invoice?
+
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([visitDate])
+  @@index([createdAt])
+  @@index([priorityReason])
+  @@index([isPregnantAtVisit])
+  @@map("visits")
+}
+
+model VisitProgress {
+  id                 String        @id @default(cuid())
+  visitId            String        @unique
+  currentState       PatientStatus
+  laneType           QueueLane
+  sameDoctorRequired Boolean       @default(false)
+  updatedAt          DateTime      @updatedAt
+  updatedById        String?
+
+  visit     Visit @relation(fields: [visitId], references: [id])
+  updatedBy User? @relation("VisitProgressUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([currentState])
+  @@index([laneType])
+  @@index([updatedAt])
+  @@map("visit_progress")
+}
+
+model VisitStateHistory {
+  id              String         @id @default(cuid())
+  visitId         String
+  fromState       PatientStatus?
+  toState         PatientStatus
+  triggerEvent    String?
+  triggeredById   String?
+  transitionedAt  DateTime       @default(now())
+  note            String?        @db.Text
+  durationInState Int?
+
+  visit       Visit @relation(fields: [visitId], references: [id])
+  triggeredBy User? @relation("VisitStateTriggeredBy", fields: [triggeredById], references: [id])
+
+  @@index([visitId, transitionedAt])
+  @@index([toState])
+  @@map("visit_state_histories")
+}
+
+model VisitClinical {
+  id                   String    @id @default(cuid())
+  visitId              String    @unique
+  provisionalDiagnosis String?   @db.Text
+  finalDiagnosis       String?   @db.Text
+  conclusion           String?   @db.Text
+  treatmentPlan        String?   @db.Text
+  clinicalNotes        String?   @db.Text
+  cancelReason         String?   @db.Text
+  examStartAt          DateTime?
+  clsStartAt           DateTime?
+  clsDoneAt            DateTime?
+  conclusionStartAt    DateTime?
+  completedAt          DateTime?
+  canceledAt           DateTime?
+  totalWaitMinutes     Int?
+  totalVisitMinutes    Int?
+  updatedAt            DateTime  @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id])
+
+  @@index([visitId])
+  @@map("visit_clinicals")
+}
+
+model VisitAssignment {
+  id               String   @id @default(cuid())
+  visitId          String
+  doctorId         String?
+  roomId           String?
+  assignedById     String?
+  isCurrent        Boolean  @default(true)
+  assignmentReason String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  visit      Visit          @relation(fields: [visitId], references: [id])
+  doctor     DoctorProfile? @relation("VisitAssignmentDoctor", fields: [doctorId], references: [id])
+  room       Room?          @relation(fields: [roomId], references: [id])
+  assignedBy User?          @relation("VisitAssignmentAssignedBy", fields: [assignedById], references: [id])
+
+  @@index([visitId])
+  @@index([doctorId])
+  @@index([roomId])
+  @@index([isCurrent])
+  @@map("visit_assignments")
+}
+
+model QueueItem {
+  id                   String          @id @default(cuid())
+  visitId              String
+  queueType            QueueType
+  laneType             QueueLane
+  targetRoomId         String?
+  targetDoctorId       String?
+  isBase               Boolean         @default(false)
+  isUrgent             Boolean         @default(false)
+  isAgePriority        Boolean         @default(false)
+  isPregnantPriority   Boolean         @default(false)
+  priorityReason       PriorityReason?
+  initialPriorityScore Float
+  appointmentTime      DateTime?
+  enqueuedAt           DateTime        @default(now())
+  createdById          String?
+  sameDoctorRequired   Boolean         @default(false)
+  updatedAt            DateTime        @updatedAt
+
+  visit             Visit              @relation(fields: [visitId], references: [id])
+  targetRoom        Room?              @relation("QueueItemTargetRoom", fields: [targetRoomId], references: [id])
+  targetDoctor      DoctorProfile?     @relation("QueueItemTargetDoctor", fields: [targetDoctorId], references: [id])
+  createdBy         User?              @relation("QueueItemCreatedBy", fields: [createdById], references: [id])
+  status            QueueItemStatus?
+  histories         QueueItemHistory[]
+  turns             Turn[]
+  dispatchDecisions DispatchDecision[]
+
+  @@index([visitId])
+  @@index([queueType])
+  @@index([laneType])
+  @@index([targetRoomId])
+  @@index([targetDoctorId])
+  @@index([enqueuedAt])
+  @@index([sameDoctorRequired])
+  @@index([priorityReason])
+  @@index([isPregnantPriority])
+  @@map("queue_items")
+}
+
+model QueueItemStatus {
+  id               String      @id @default(cuid())
+  queueItemId      String      @unique
+  status           QueueStatus
+  priorityScore    Float
+  lastScoreUpdated DateTime?
+  calledAt         DateTime?
+  servedAt         DateTime?
+  dequeuedAt       DateTime?
+  isTimeout        Boolean     @default(false)
+  updatedById      String?
+  updatedAt        DateTime    @updatedAt
+
+  queueItem QueueItem @relation(fields: [queueItemId], references: [id])
+  updatedBy User?     @relation("QueueItemStatusUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status])
+  @@index([priorityScore])
+  @@index([calledAt])
+  @@index([servedAt])
+  @@map("queue_item_statuses")
+}
+
+model QueueItemHistory {
+  id                String       @id @default(cuid())
+  queueItemId       String
+  eventType         String
+  fromStatus        QueueStatus?
+  toStatus          QueueStatus?
+  fromScore         Float?
+  toScore           Float?
+  eventTime         DateTime     @default(now())
+  triggeredBy       String?
+  triggeredByUserId String?
+  note              String?      @db.Text
+
+  queueItem       QueueItem @relation(fields: [queueItemId], references: [id])
+  triggeredByUser User?     @relation("QueueItemHistoryTriggeredByUser", fields: [triggeredByUserId], references: [id])
+
+  @@index([queueItemId])
+  @@index([eventTime])
+  @@map("queue_item_histories")
+}
+
+model Turn {
+  id               String   @id @default(cuid())
+  visitId          String
+  roomId           String
+  doctorId         String?
+  queueItemId      String?
+  turnType         TurnType
+  serviceId        String?
+  timeoutThreshold Int?
+  createdAt        DateTime @default(now())
+  createdById      String?
+  updatedAt        DateTime @updatedAt
+
+  visit     Visit           @relation(fields: [visitId], references: [id])
+  room      Room            @relation(fields: [roomId], references: [id])
+  doctor    DoctorProfile?  @relation("TurnDoctor", fields: [doctorId], references: [id])
+  queueItem QueueItem?      @relation(fields: [queueItemId], references: [id])
+  service   ServiceCatalog? @relation(fields: [serviceId], references: [id])
+  createdBy User?           @relation("TurnCreatedBy", fields: [createdById], references: [id])
+  progress  TurnProgress?
+
+  @@index([visitId])
+  @@index([roomId])
+  @@index([doctorId])
+  @@index([queueItemId])
+  @@index([turnType])
+  @@index([createdAt])
+  @@map("turns")
+}
+
+model TurnProgress {
+  id              String     @id @default(cuid())
+  turnId          String     @unique
+  status          TurnStatus
+  calledAt        DateTime?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  timeoutAt       DateTime?
+  durationMinutes Int?
+  note            String?    @db.Text
+  updatedById     String?
+  updatedAt       DateTime   @updatedAt
+
+  turn      Turn  @relation(fields: [turnId], references: [id])
+  updatedBy User? @relation("TurnProgressUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status])
+  @@index([updatedAt])
+  @@map("turn_progress")
+}
+
+model CLSOrder {
+  id           String         @id @default(cuid())
+  visitId      String
+  orderedById  String
+  serviceId    String
+  roomId       String?
+  priority     CLSPriority
+  status       CLSOrderStatus
+  orderedAt    DateTime       @default(now())
+  completedAt  DateTime?
+  clinicalNote String?        @db.Text
+  note         String?        @db.Text
+  updatedAt    DateTime       @updatedAt
+
+  visit     Visit          @relation(fields: [visitId], references: [id])
+  orderedBy DoctorProfile  @relation("CLSOrderOrderedBy", fields: [orderedById], references: [id])
+  service   ServiceCatalog @relation(fields: [serviceId], references: [id])
+  room      Room?          @relation(fields: [roomId], references: [id])
+  result    CLSResult?
+
+  @@index([visitId])
+  @@index([serviceId])
+  @@index([roomId])
+  @@index([status])
+  @@index([orderedAt])
+  @@map("cls_orders")
+}
+
+model CLSResult {
+  id            String    @id @default(cuid())
+  clsOrderId    String    @unique
+  resultDate    DateTime?
+  resultFileUrl String?
+  resultText    String?   @db.Text
+  resultAt      DateTime?
+  resultById    String?
+  isAbnormal    Boolean   @default(false)
+  note          String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clsOrder CLSOrder @relation(fields: [clsOrderId], references: [id])
+  resultBy User?    @relation("CLSResultResultBy", fields: [resultById], references: [id])
+
+  @@index([clsOrderId])
+  @@index([isAbnormal])
+  @@map("cls_results")
+}
+
+model ResourceLoad {
+  id              String     @id @default(cuid())
+  roomId          String
+  recordedAt      DateTime
+  currentLoad     Int
+  queueLength     Int
+  utilizationRate Float
+  waitTimeRatio   Float?
+  queuePressure   Float?
+  avgActualWait   Float?
+  avgServiceTime  Float?
+  alertLevel      AlertLevel
+  doctorAvailable Int?
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, recordedAt])
+  @@index([roomId])
+  @@index([recordedAt])
+  @@index([alertLevel])
+  @@map("resource_loads")
+}
+
+model QueueSnapshot {
+  id                   String      @id @default(cuid())
+  roomId               String
+  snapshotTime         DateTime
+  queueTime            Float?
+  utilizationRate      Float?
+  waitTimeRatio        Float?
+  avgWaitMinutes       Float?
+  laneAppointmentCount Int         @default(0)
+  laneAfterClsCount    Int         @default(0)
+  lanePriorityCount    Int         @default(0)
+  laneNormalCount      Int         @default(0)
+  alertLevel           AlertLevel?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, snapshotTime])
+  @@index([roomId])
+  @@index([snapshotTime])
+  @@index([alertLevel])
+  @@map("queue_snapshots")
+}
+
+model DispatchDecision {
+  id              String       @id @default(cuid())
+  visitId         String
+  queueItemId     String?
+  decisionById    String?
+  decisionTime    DateTime     @default(now())
+  decisionType    DecisionType
+  outcomeRoomId   String?
+  outcomeDoctorId String?
+  note            String?      @db.Text
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  visit           Visit                    @relation(fields: [visitId], references: [id])
+  queueItem       QueueItem?               @relation(fields: [queueItemId], references: [id])
+  decisionBy      User?                    @relation("DispatchDecisionBy", fields: [decisionById], references: [id])
+  outcomeRoom     Room?                    @relation("DispatchDecisionOutcomeRoom", fields: [outcomeRoomId], references: [id])
+  outcomeDoctor   DoctorProfile?           @relation("DispatchDecisionOutcomeDoctor", fields: [outcomeDoctorId], references: [id])
+  recommendations DispatchRecommendation[]
+  outcome         DispatchOutcome?
+
+  @@index([visitId])
+  @@index([queueItemId])
+  @@index([decisionTime])
+  @@index([decisionType])
+  @@map("dispatch_decisions")
+}
+
+model DispatchRecommendation {
+  id                   String      @id @default(cuid())
+  decisionId           String
+  rank                 Int
+  roomId               String
+  resourceScore        Float?
+  queueLength          Int?
+  utilizationRate      Float?
+  estimatedWaitMinutes Float?
+  alertLevel           AlertLevel?
+  reason               String?     @db.Text
+  wasSelected          Boolean     @default(false)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  decision DispatchDecision @relation(fields: [decisionId], references: [id])
+  room     Room             @relation(fields: [roomId], references: [id])
+
+  @@unique([decisionId, rank])
+  @@index([decisionId])
+  @@index([roomId])
+  @@map("dispatch_recommendations")
+}
+
+model DispatchOutcome {
+  id                      String   @id @default(cuid())
+  decisionId              String   @unique
+  serviceId               String?
+  followedRecommendation  Boolean?
+  deviationNote           String?  @db.Text
+  actualWaitMinutes       Float?
+  recommendedWaitEstimate Float?
+  waitDifference          Float?
+  deviationReason         String?  @db.Text
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  decision DispatchDecision @relation(fields: [decisionId], references: [id])
+  service  ServiceCatalog?  @relation(fields: [serviceId], references: [id])
+
+  @@index([decisionId])
+  @@map("dispatch_outcomes")
+}
+
+model EscalationLog {
+  id                String     @id @default(cuid())
+  visitId           String
+  escalatedById     String?
+  escalationTime    DateTime   @default(now())
+  escalationType    String
+  fromLane          QueueLane?
+  toLane            QueueLane?
+  fromPriorityScore Float?
+  toPriorityScore   Float?
+  reason            String?    @db.Text
+  outcome           String?    @db.Text
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  visit       Visit @relation(fields: [visitId], references: [id])
+  escalatedBy User? @relation("EscalationBy", fields: [escalatedById], references: [id])
+
+  @@index([visitId])
+  @@index([escalationTime])
+  @@index([fromLane])
+  @@index([toLane])
+  @@map("escalation_logs")
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  visitId       String        @unique
+  totalAmount   Decimal       @db.Decimal(14, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  status        InvoiceStatus
+  paymentMethod String?
+  createdAt     DateTime      @default(now())
+  paidAt        DateTime?
+  updatedAt     DateTime      @updatedAt
+
+  visit Visit         @relation(fields: [visitId], references: [id])
+  items InvoiceItem[]
+
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  serviceId   String
+  description String?  @db.Text
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  totalPrice  Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice Invoice        @relation(fields: [invoiceId], references: [id])
+  service ServiceCatalog @relation(fields: [serviceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([serviceId])
+  @@map("invoice_items")
+}

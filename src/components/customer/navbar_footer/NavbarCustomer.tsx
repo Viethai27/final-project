@@ -18,11 +18,12 @@ const NavbarCustomer: React.FC = () => {
   const navOffset = "12px";
 
   const navLinks: NavLinkItem[] = [
-    { name: "Về PAMEC", href: "#" },
-    { name: "Chuyên khoa", href: "#" },
-    { name: "Tìm bác sĩ", href: "#" },
-    { name: "Trang sức khỏe", href: "#" },
-    { name: "Hướng dẫn khách hàng", href: "#" },
+    { name: "Về PAMEC", href: "#top" },
+    { name: "Chuyên khoa", href: "#departments" },
+    { name: "Tìm bác sĩ", href: "#doctors" },
+    { name: "Trang sức khỏe", href: "#reasons" },
+    { name: "Hướng dẫn khách hàng", href: "#booking" },
+    { name: "Tra cứu lịch sử khám", href: "/visit-tracking" },
   ];
 
   return (
@@ -70,17 +71,32 @@ const NavbarCustomer: React.FC = () => {
         {/* Navigation Links - centered */}
         <Flex align="center" gap={6} position="absolute" left="45%" transform="translateX(-50%)">
           {navLinks.map((link) => (
-            <Link
-              key={link.name}
-              href={link.href}
-              fontSize="sm"
-              fontWeight="500"
-              color="gray.700"
-              _hover={{ color: "blue.600", textDecoration: "none" }}
-              whiteSpace="nowrap"
-            >
-              {link.name}
-            </Link>
+            link.href.startsWith('/') ? (
+              <Link
+                key={link.name}
+                as={RouterLink}
+                to={link.href}
+                fontSize="sm"
+                fontWeight="500"
+                color="gray.700"
+                _hover={{ color: "blue.600", textDecoration: "none" }}
+                whiteSpace="nowrap"
+              >
+                {link.name}
+              </Link>
+            ) : (
+              <Link
+                key={link.name}
+                href={link.href}
+                fontSize="sm"
+                fontWeight="500"
+                color="gray.700"
+                _hover={{ color: "blue.600", textDecoration: "none" }}
+                whiteSpace="nowrap"
+              >
+                {link.name}
+              </Link>
+            )
           ))}
         </Flex>
 

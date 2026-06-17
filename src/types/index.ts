@@ -7,7 +7,10 @@ export interface User {
   username: string;
   role: UserRole;
   department?: string;
+  departmentId?: string | null;
+  doctorProfileId?: string | null;
   roomId?: string;
+  isActive?: boolean;
   avatar?: string;
 }
 
@@ -45,6 +48,7 @@ export type PatientStatus =
   | 'IN_CLS'
   | 'WAITING_RESULT'
   | 'WAITING_CONCLUSION'
+  | 'IN_CONCLUSION'
   | 'WAITING_PAYMENT'
   | 'COMPLETED'
   | 'CANCELLED';
@@ -73,6 +77,8 @@ export interface Visit {
   completionTime?: string;
   appointmentId?: string;
   notes?: string;
+  treatmentDirection?: string;
+  treatmentPlan?: string;
 }
 
 // ===== QUEUE =====
@@ -94,6 +100,35 @@ export interface QueueItem {
   estimatedWaitMinutes: number;
   calledAt?: string;
   servedAt?: string;
+  noShowCount?: number;
+  mustReturnToDoctor?: boolean;
+  chiefComplaint?: string;
+}
+
+// ===== ACTION LOG =====
+export type ActionType =
+  | 'CALL_PATIENT'
+  | 'START_SERVICE'
+  | 'NO_SHOW'
+  | 'TRANSFER_ROOM'
+  | 'ACCEPT_REALLOCATION'
+  | 'DISMISS_REALLOCATION'
+  | 'CANCEL_VISIT';
+
+export interface ActionLog {
+  id: string;
+  actionType: ActionType;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  fromStatus?: PatientStatus;
+  toStatus?: PatientStatus;
+  fromRoomId?: string;
+  toRoomId?: string;
+  reason?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
 }
 
 // ===== ROOM =====

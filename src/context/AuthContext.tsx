@@ -1,57 +1,87 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { User, UserRole } from '../types';
-import { MOCK_USERS, DEMO_CREDENTIALS } from '../data/mockData';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { authApi } from '../services/authApi';
+import { clearAuthToken, getAuthToken, setAuthToken } from '../services/http';
+import type { User } from '../types';
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  loginAsDemo: (role: UserRole) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = sessionStorage.getItem('mediflow_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const cred = DEMO_CREDENTIALS[username];
-    if (!cred) return { success: false, message: 'Tài khoản không tồn tại' };
-    if (cred.password !== password) return { success: false, message: 'Mật khẩu không đúng' };
-    const foundUser = MOCK_USERS.find(u => u.id === cred.userId);
-    if (!foundUser) return { success: false, message: 'Lỗi hệ thống' };
-    setUser(foundUser);
-    sessionStorage.setItem('mediflow_user', JSON.stringify(foundUser));
-    return { success: true };
+  useEffect(() => {
+    let active = true;
+
+    const restoreSession = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await authApi.me();
+        if (active) {
+          setUser(response.data.user as User);
+        }
+      } catch {
+        clearAuthToken();
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const loginAsDemo = useCallback((role: UserRole) => {
-    const roleMap: Record<UserRole, string> = {
-      ADMIN: 'u1',
-      RECEPTIONIST: 'u2',
-      COORDINATOR: 'u3',
-      DOCTOR: 'u4',
-      LAB_STAFF: 'u7',
-      MANAGER: 'u8',
-    };
-    const foundUser = MOCK_USERS.find(u => u.id === roleMap[role]);
-    if (foundUser) {
-      setUser(foundUser);
-      sessionStorage.setItem('mediflow_user', JSON.stringify(foundUser));
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      const response = await authApi.login({ username, password });
+      setAuthToken(response.data.token);
+      setUser(response.data.user as User);
+      return { success: true };
+    } catch (error) {
+      clearAuthToken();
+      setUser(null);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Đăng nhập thất bại.',
+      };
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    sessionStorage.removeItem('mediflow_user');
+  const logout = useCallback(async () => {
+    try {
+      if (getAuthToken()) {
+        await authApi.logout();
+      }
+    } catch (error) {
+      console.warn('[AUTH] logout failed, clearing local session anyway', error);
+    } finally {
+      clearAuthToken();
+      setUser(null);
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, loginAsDemo, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

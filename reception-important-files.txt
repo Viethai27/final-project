@@ -1,0 +1,3184 @@
+﻿==================== src\App.tsx ====================
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
+import type { UserRole } from './types';
+
+import PublicCustomerPage from './pages/PublicCustomerPage';
+import CustomerLayout from './layouts/customer/CustomerLayout';
+import AppointmentPage from './pages/customer/Appointment';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import ReceptionPage from './pages/ReceptionPage';
+import QueuePage from './pages/QueuePage';
+import DispatchPage from './pages/DispatchPage';
+import DoctorPage from './pages/DoctorPage';
+import LabPage from './pages/LabPage';
+import VisitTrackingPage from './pages/VisitTrackingPage';
+import MonitoringPage from './pages/MonitoringPage';
+import ReportsPage from './pages/ReportsPage';
+
+const ROLE_DEFAULT_PATH: Record<UserRole, string> = {
+  ADMIN: '/dashboard',
+  RECEPTIONIST: '/reception',
+  COORDINATOR: '/queue',
+  DOCTOR: '/doctor',
+  LAB_STAFF: '/lab',
+  MANAGER: '/monitoring',
+};
+
+function ProtectedRoute({
+  children,
+  allowedRoles,
+}: {
+  children: React.ReactNode;
+  allowedRoles?: UserRole[];
+}) {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    const defaultPath = ROLE_DEFAULT_PATH[user.role];
+    return <Navigate to={defaultPath} replace />;
+  }
+  return <>{children}</>;
+}
+
+function RootRedirect() {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user) return <Navigate to={ROLE_DEFAULT_PATH[user.role]} replace />;
+  return <Navigate to="/login" replace />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PublicCustomerPage />} />
+        <Route path="/customer" element={<PublicCustomerPage />} />
+        <Route
+          path="/appointment"
+          element={
+            <CustomerLayout>
+              <AppointmentPage />
+            </CustomerLayout>
+          }
+        />
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'COORDINATOR']}>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reception"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'RECEPTIONIST', 'COORDINATOR']}>
+              <ReceptionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/queue"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'COORDINATOR', 'RECEPTIONIST']}>
+              <QueuePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dispatch"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'COORDINATOR', 'RECEPTIONIST']}>
+              <DispatchPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}>
+              <DoctorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lab"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'LAB_STAFF']}>
+              <LabPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/visit-tracking"
+          element={<VisitTrackingPage />}
+        />
+        <Route
+          path="/monitoring"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'COORDINATOR']}>
+              <MonitoringPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}>
+              <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<RootRedirect />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+
+
+==================== src\pages\ReceptionPage.tsx ====================
+import { useMemo, useState } from 'react';
+import {
+  ArrowRightLeft,
+  Bell,
+  CalendarCheck,
+  Clock3,
+  FilePlus2,
+  ListChecks,
+  Printer,
+  Search,
+  Ticket,
+  UserCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { useSearchParams } from 'react-router-dom';
+import Layout from '../components/layout/Layout';
+
+type ReceptionStatus =
+  | 'Chờ tiếp nhận'
+  | 'Đã tiếp nhận'
+  | 'Chờ xác nhận lịch hẹn'
+  | 'Chờ khám'
+  | 'Đang khám'
+  | 'Chờ CLS'
+  | 'Đang thực hiện CLS'
+  | 'Chờ kết quả'
+  | 'Chờ kết luận'
+  | 'Hoàn tất';
+
+interface ReceptionPatient {
+  stt: string;
+  code: string;
+  name: string;
+  phone: string;
+  registrationType: 'Đặt lịch trước' | 'Đến trực tiếp';
+  department: string;
+  expectedDoctor: string;
+  room: string;
+  status: ReceptionStatus;
+  priority?: boolean;
+  waitTime: string;
+  expectedWait: string;
+  address: string;
+  note: string;
+}
+
+interface DoctorSchedule {
+  name: string;
+  department: string;
+  waiting: number;
+  time: string;
+  status: 'Đang làm việc' | 'Tạm nghỉ' | 'Hết lịch';
+}
+
+const STATUS_FILTERS = ['Chờ tiếp nhận', 'Đã tiếp nhận', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Hoàn tất'] as const;
+
+const PATIENTS: ReceptionPatient[] = [
+  { stt: '001', code: 'BN001', name: 'Nguyễn Thị Lan', phone: '0987654321', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ tiếp nhận', priority: true, waitTime: '04 phút', expectedWait: '10 phút', address: 'Quận 3, TP.HCM', note: 'Đã đặt lịch trước, thai 28 tuần, cần xác minh thông tin BHYT.' },
+  { stt: '002', code: 'BN002', name: 'Trần Minh Anh', phone: '0912345678', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Đã tiếp nhận', waitTime: '08 phút', expectedWait: '18 phút', address: 'Quận 7, TP.HCM', note: 'Đã tạo hồ sơ và cần cấp số thứ tự.' },
+  { stt: '003', code: 'BN003', name: 'Phạm Thu Hà', phone: '0901122334', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Chờ khám', waitTime: '21 phút', expectedWait: '25 phút', address: 'Bình Thạnh, TP.HCM', note: 'Đã xác nhận lịch hẹn, đang chờ gọi vào phòng khám.' },
+  { stt: '004', code: 'BN004', name: 'Lê Hoàng Mai', phone: '0933445566', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Chờ CLS', waitTime: '34 phút', expectedWait: '20 phút', address: 'Thủ Đức, TP.HCM', note: 'Cần hỗ trợ điều phối sang khu cận lâm sàng.' },
+  { stt: '005', code: 'BN005', name: 'Hoàng Thu Trang', phone: '0966778899', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ xác nhận lịch hẹn', waitTime: '02 phút', expectedWait: '12 phút', address: 'Quận 10, TP.HCM', note: 'Lịch hẹn 09:30, chưa xác nhận có mặt.' },
+  { stt: '006', code: 'BN006', name: 'Đặng Ngọc Anh', phone: '0977889900', registrationType: 'Đến trực tiếp', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Hoàn tất', waitTime: '00 phút', expectedWait: '00 phút', address: 'Gò Vấp, TP.HCM', note: 'Đã hoàn tất luồng tiếp nhận trong ngày.' },
+  { stt: '007', code: 'BN007', name: 'Vũ Thanh Hương', phone: '0909988776', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Đang khám', priority: true, waitTime: '16 phút', expectedWait: '05 phút', address: 'Tân Bình, TP.HCM', note: 'Bệnh nhân ưu tiên, đã vào phòng khám.' },
+  { stt: '008', code: 'BN008', name: 'Bùi Khánh Linh', phone: '0911223344', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Mai Thanh Tú', room: 'Phòng 205', status: 'Chờ kết quả', waitTime: '43 phút', expectedWait: '15 phút', address: 'Phú Nhuận, TP.HCM', note: 'Theo dõi trạng thái để hướng dẫn bệnh nhân quay lại phòng khám.' },
+];
+
+const DOCTOR_SCHEDULES: DoctorSchedule[] = [
+  { name: 'BS Nguyễn Văn An', department: 'Sản khoa', waiting: 12, time: '07:30 - 11:30', status: 'Đang làm việc' },
+  { name: 'BS Trần Thu Hà', department: 'Phụ khoa', waiting: 8, time: '08:00 - 12:00', status: 'Đang làm việc' },
+  { name: 'BS Lê Minh Quân', department: 'Sản khoa', waiting: 0, time: '13:00 - 17:00', status: 'Tạm nghỉ' },
+  { name: 'BS Mai Thanh Tú', department: 'Phụ khoa', waiting: 5, time: '07:30 - 16:30', status: 'Đang làm việc' },
+  { name: 'BS Phạm Hoài Nam', department: 'Sản khoa', waiting: 0, time: '07:30 - 10:30', status: 'Hết lịch' },
+];
+
+const STATUS_STYLES: Record<ReceptionStatus, string> = {
+  'Chờ tiếp nhận': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Đã tiếp nhận': 'bg-sky-100 text-sky-700 border-sky-200',
+  'Chờ xác nhận lịch hẹn': 'bg-amber-100 text-amber-700 border-amber-200',
+  'Chờ khám': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'Đang khám': 'bg-violet-100 text-violet-700 border-violet-200',
+  'Chờ CLS': 'bg-purple-100 text-purple-700 border-purple-200',
+  'Đang thực hiện CLS': 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
+  'Chờ kết quả': 'bg-orange-100 text-orange-700 border-orange-200',
+  'Chờ kết luận': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  'Hoàn tất': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+};
+
+const ACTIONS_BY_STATUS: Record<ReceptionStatus, string[]> = {
+  'Chờ tiếp nhận': ['Tiếp nhận', 'Xác nhận lịch hẹn'],
+  'Đã tiếp nhận': ['Tạo phiếu khám', 'Cấp số thứ tự'],
+  'Chờ xác nhận lịch hẹn': ['Xác nhận lịch hẹn', 'Đổi lịch'],
+  'Chờ khám': ['Điều phối', 'Xem trạng thái', 'In phiếu khám'],
+  'Đang khám': ['Xem trạng thái'],
+  'Chờ CLS': ['Điều phối', 'Xem trạng thái'],
+  'Đang thực hiện CLS': ['Xem trạng thái'],
+  'Chờ kết quả': ['Xem trạng thái'],
+  'Chờ kết luận': ['Xem trạng thái'],
+  'Hoàn tất': ['In phiếu khám'],
+};
+
+function StatusBadge({ status }: { status: ReceptionStatus }) {
+  return (
+    <span className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap', STATUS_STYLES[status])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {status}
+    </span>
+  );
+}
+
+function TimelineStep({ label, active, done }: { label: string; active?: boolean; done?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={clsx(
+        'h-3 w-3 rounded-full border-2 flex-shrink-0',
+        active ? 'border-sky-600 bg-sky-600' : done ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300 bg-white'
+      )} />
+      <span className={clsx('text-xs font-medium', active ? 'text-sky-700' : done ? 'text-gray-700' : 'text-gray-400')}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+export default function ReceptionPage() {
+  const [searchParams] = useSearchParams();
+  const activeView = searchParams.get('view') ?? 'reception';
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
+  const [selectedCode, setSelectedCode] = useState('BN001');
+  const [scheduleDepartment, setScheduleDepartment] = useState('Tất cả');
+  const [scheduleDoctor, setScheduleDoctor] = useState('Tất cả');
+
+  const filteredPatients = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    return PATIENTS.filter(patient => {
+      const matchesKeyword = !keyword ||
+        patient.name.toLowerCase().includes(keyword) ||
+        patient.code.toLowerCase().includes(keyword) ||
+        patient.phone.includes(keyword) ||
+        patient.stt.toLowerCase().includes(keyword);
+      const matchesStatus = statusFilter === 'Tất cả' || patient.status === statusFilter;
+      return matchesKeyword && matchesStatus;
+    });
+  }, [searchTerm, statusFilter]);
+
+  const filteredSchedules = useMemo(() => {
+    return DOCTOR_SCHEDULES.filter(schedule => {
+      const matchesDepartment = scheduleDepartment === 'Tất cả' || schedule.department === scheduleDepartment;
+      const matchesDoctor = scheduleDoctor === 'Tất cả' || schedule.name === scheduleDoctor;
+      return matchesDepartment && matchesDoctor;
+    });
+  }, [scheduleDepartment, scheduleDoctor]);
+
+  const selectedPatient = PATIENTS.find(patient => patient.code === selectedCode) ?? filteredPatients[0] ?? PATIENTS[0];
+  const newArrival = PATIENTS.find(patient => patient.status === 'Chờ tiếp nhận');
+  const waitingAppointment = PATIENTS.find(patient => patient.status === 'Chờ xác nhận lịch hẹn');
+  const dispatchPatient = PATIENTS.find(patient => patient.status === 'Chờ CLS') ?? PATIENTS.find(patient => patient.status === 'Chờ khám');
+
+  const stats = [
+    { label: 'Bệnh nhân đã tiếp nhận hôm nay', value: 42, icon: UserCheck, accent: 'bg-sky-50 text-sky-700 border-sky-100' },
+    { label: 'Đặt lịch chờ xác nhận', value: PATIENTS.filter(p => p.status === 'Chờ xác nhận lịch hẹn').length, icon: CalendarCheck, accent: 'bg-amber-50 text-amber-700 border-amber-100' },
+    { label: 'Bệnh nhân đang chờ khám', value: PATIENTS.filter(p => p.status === 'Chờ khám').length, icon: Users, accent: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+    { label: 'Bệnh nhân cần điều phối', value: PATIENTS.filter(p => ['Chờ CLS', 'Chờ khám'].includes(p.status)).length, icon: ArrowRightLeft, accent: 'bg-purple-50 text-purple-700 border-purple-100' },
+    { label: 'Thời gian chờ trung bình', value: '18p', icon: Clock3, accent: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  ];
+
+  const timeline = ['Tiếp nhận', 'Tạo phiếu khám', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Chờ kết quả', 'Chờ kết luận', 'Hoàn tất'];
+  const currentTimelineIndex = Math.max(0, timeline.findIndex(step =>
+    step === selectedPatient.status ||
+    (selectedPatient.status === 'Chờ tiếp nhận' && step === 'Tiếp nhận') ||
+    (selectedPatient.status === 'Đã tiếp nhận' && step === 'Tạo phiếu khám') ||
+    (selectedPatient.status === 'Đang thực hiện CLS' && step === 'Chờ kết quả')
+  ));
+
+  const showStats = activeView === 'reception' || activeView === 'overview';
+  const showAlerts = ['reception', 'overview', 'appointments', 'notifications'].includes(activeView);
+  const showPatientTable = ['reception', 'appointments', 'patients'].includes(activeView);
+  const showSchedule = ['reception', 'overview', 'doctors'].includes(activeView);
+  const showDetailPanel = ['reception', 'appointments', 'patients', 'notifications', 'account'].includes(activeView);
+  const mainTitle = {
+    reception: 'Tiếp nhận bệnh nhân',
+    overview: 'Tổng quan lễ tân',
+    appointments: 'Đăng ký khám / Đặt lịch',
+    patients: 'Danh sách bệnh nhân',
+    doctors: 'Lịch làm việc bác sĩ',
+    notifications: 'Thông báo',
+    account: 'Tài khoản',
+  }[activeView] ?? 'Tiếp nhận bệnh nhân';
+
+  return (
+    <Layout pageTitle={mainTitle}>
+      <div className="space-y-5">
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Quầy lễ tân hôm nay</p>
+              <h1 className="mt-1 text-2xl font-bold text-gray-900">Bảng điều khiển lễ tân</h1>
+              <p className="mt-1 text-sm text-gray-500">Tiếp nhận, đăng ký khám và theo dõi luồng bệnh nhân trong ngày</p>
+            </div>
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="relative min-w-[300px]">
+                  <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={searchTerm}
+                    onChange={event => setSearchTerm(event.target.value)}
+                    placeholder="Tìm tên, mã BN, SĐT hoặc số thứ tự"
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700">
+                    <UserPlus size={16} />
+                    Tiếp nhận bệnh nhân
+                  </button>
+                  <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100">
+                    <FilePlus2 size={16} />
+                    Tạo phiếu khám
+                  </button>
+                  <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100">
+                    <CalendarCheck size={16} />
+                    Xác nhận lịch hẹn
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['Tất cả', ...STATUS_FILTERS].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={clsx(
+                      'rounded-lg border px-3 py-2 text-xs font-semibold transition',
+                      statusFilter === status
+                        ? 'border-sky-200 bg-sky-100 text-sky-800'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-sky-200 hover:text-sky-700'
+                    )}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {showStats && (
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {stats.map(item => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500">{item.label}</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{item.value}</p>
+                    </div>
+                    <div className={clsx('flex h-10 w-10 items-center justify-center rounded-lg border', item.accent)}>
+                      <Icon size={18} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
+        <section className={clsx(
+          'grid grid-cols-1 gap-5',
+          showDetailPanel ? 'xl:grid-cols-[minmax(0,1fr)_370px]' : 'xl:grid-cols-1'
+        )}>
+          <div className="space-y-5">
+            {showAlerts && (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                {[
+                  { label: 'Bệnh nhân mới đến', patient: newArrival, icon: Bell },
+                  { label: 'Lịch hẹn chờ xác nhận', patient: waitingAppointment, icon: CalendarCheck },
+                  { label: 'Cần điều phối', patient: dispatchPatient, icon: ArrowRightLeft },
+                ].map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => item.patient && setSelectedCode(item.patient.code)}
+                      className="rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
+                        <Icon size={17} className="text-sky-600" />
+                      </div>
+                      <p className="mt-2 text-sm font-bold text-gray-900">{item.patient?.stt} - {item.patient?.name}</p>
+                      <p className="mt-1 text-xs text-gray-500">{item.patient?.department} • {item.patient?.waitTime}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeView === 'appointments' && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">Đăng ký khám và xác nhận lịch hẹn</h2>
+                    <p className="text-sm text-gray-600">Tập trung xử lý bệnh nhân đặt lịch trước, tạo phiếu khám và cấp số thứ tự.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700">Tiếp nhận mới</button>
+                    <button className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-100">Xác nhận lịch</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showPatientTable && (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-gray-200 p-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">{activeView === 'patients' ? 'Danh sách bệnh nhân' : 'Danh sách tiếp nhận và hàng đợi'}</h2>
+                  <p className="text-sm text-gray-500">Theo dõi bệnh nhân mới đến, lịch hẹn và trạng thái điều phối</p>
+                </div>
+                <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <Printer size={16} />
+                  In danh sách
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-[1180px] w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                    <tr>
+                      <th className="px-4 py-3">STT</th>
+                      <th className="px-4 py-3">Mã bệnh nhân</th>
+                      <th className="px-4 py-3">Họ tên</th>
+                      <th className="px-4 py-3">Số điện thoại</th>
+                      <th className="px-4 py-3">Loại đăng ký</th>
+                      <th className="px-4 py-3">Chuyên khoa</th>
+                      <th className="px-4 py-3">Bác sĩ dự kiến</th>
+                      <th className="px-4 py-3">Trạng thái</th>
+                      <th className="px-4 py-3">Mức ưu tiên</th>
+                      <th className="px-4 py-3">Thời gian chờ</th>
+                      <th className="px-4 py-3">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredPatients.map(patient => (
+                      <tr
+                        key={patient.code}
+                        onClick={() => setSelectedCode(patient.code)}
+                        className={clsx('cursor-pointer transition hover:bg-sky-50/60', selectedPatient.code === patient.code && 'bg-sky-50')}
+                      >
+                        <td className="px-4 py-3 font-mono font-bold text-sky-700">{patient.stt}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-700">{patient.code}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{patient.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{patient.phone}</td>
+                        <td className="px-4 py-3 text-gray-600">{patient.registrationType}</td>
+                        <td className="px-4 py-3 text-gray-600">{patient.department}</td>
+                        <td className="px-4 py-3 text-gray-600">{patient.expectedDoctor}</td>
+                        <td className="px-4 py-3"><StatusBadge status={patient.status} /></td>
+                        <td className="px-4 py-3">
+                          {patient.priority ? (
+                            <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">Ưu tiên</span>
+                          ) : (
+                            <span className="text-xs font-medium text-gray-400">Thường</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock3 size={14} className="text-gray-400" />
+                            {patient.waitTime}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex max-w-[250px] flex-wrap gap-1.5">
+                            {ACTIONS_BY_STATUS[patient.status].map(action => (
+                              <button
+                                key={action}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  setSelectedCode(patient.code);
+                                }}
+                                className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                              >
+                                {action}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            )}
+
+            {showSchedule && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Lịch làm việc bác sĩ</h2>
+                  <p className="text-sm text-gray-500">Dùng để phân bổ và điều phối bệnh nhân theo phòng khám</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="date"
+                    defaultValue="2026-06-05"
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                  />
+                  <select
+                    value={scheduleDepartment}
+                    onChange={event => setScheduleDepartment(event.target.value)}
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                  >
+                    <option>Tất cả</option>
+                    <option>Sản khoa</option>
+                    <option>Phụ khoa</option>
+                  </select>
+                  <select
+                    value={scheduleDoctor}
+                    onChange={event => setScheduleDoctor(event.target.value)}
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                  >
+                    <option>Tất cả</option>
+                    {DOCTOR_SCHEDULES.map(schedule => <option key={schedule.name}>{schedule.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {filteredSchedules.map(schedule => (
+                  <div key={schedule.name} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{schedule.name}</p>
+                        <p className="text-xs text-gray-500">{schedule.department} • {schedule.time}</p>
+                      </div>
+                      <span className={clsx(
+                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                        schedule.status === 'Đang làm việc' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                        schedule.status === 'Tạm nghỉ' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                        'border-gray-200 bg-white text-gray-500'
+                      )}>
+                        {schedule.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 text-xs font-medium text-gray-600">
+                      <ListChecks size={14} className="text-sky-600" />
+                      {schedule.waiting} bệnh nhân chờ
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+          </div>
+
+          {showDetailPanel && (
+          <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{activeView === 'account' ? 'Tài khoản lễ tân' : 'Chi tiết bệnh nhân'}</p>
+                <h3 className="mt-1 text-lg font-bold text-gray-900">{selectedPatient.name}</h3>
+                <p className="text-sm text-gray-500">{selectedPatient.code} • STT {selectedPatient.stt}</p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                <Ticket size={20} />
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 p-3">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500">Số điện thoại</p>
+                  <p className="font-semibold text-gray-800">{selectedPatient.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Loại đăng ký</p>
+                  <p className="font-semibold text-gray-800">{selectedPatient.registrationType}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Chuyên khoa</p>
+                  <p className="font-semibold text-gray-800">{selectedPatient.department}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Số thứ tự</p>
+                  <p className="font-semibold text-gray-800">{selectedPatient.stt}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Bác sĩ / phòng khám dự kiến</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedPatient.expectedDoctor} • {selectedPatient.room}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Thời gian chờ dự kiến</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedPatient.expectedWait}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase text-gray-500">Trạng thái hiện tại</span>
+              <StatusBadge status={selectedPatient.status} />
+            </div>
+
+            <div className="mt-5">
+              <p className="mb-3 text-xs font-semibold uppercase text-gray-500">Timeline luồng bệnh nhân</p>
+              <div className="space-y-3">
+                {timeline.map((step, index) => (
+                  <TimelineStep
+                    key={step}
+                    label={step}
+                    active={index === currentTimelineIndex}
+                    done={index < currentTimelineIndex || selectedPatient.status === 'Hoàn tất'}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              <p className="text-xs font-semibold uppercase text-gray-500">Ghi chú lễ tân</p>
+              <textarea
+                rows={4}
+                defaultValue={selectedPatient.note}
+                className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100"
+              />
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-2">
+              <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-700">
+                <CalendarCheck size={16} />
+                Xác nhận lịch hẹn
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100">
+                <Ticket size={16} />
+                Cấp số thứ tự
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-100">
+                <ArrowRightLeft size={16} />
+                Điều phối phòng khám
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                <Printer size={16} />
+                In phiếu khám
+              </button>
+            </div>
+          </aside>
+          )}
+        </section>
+      </div>
+    </Layout>
+  );
+}
+
+
+
+==================== src\context\HospitalContext.tsx ====================
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import type {
+  Patient, Doctor, Room, Service, Visit, QueueItem,
+  CLSOrder, CLSResult, Invoice, Appointment, StatusHistoryEntry,
+  DispatchHistoryEntry, PatientStatus, DashboardStats, ActionLog
+} from '../types';
+import {
+  MOCK_PATIENTS, MOCK_DOCTORS, MOCK_ROOMS, MOCK_SERVICES,
+  MOCK_VISITS, MOCK_QUEUE_ITEMS, MOCK_CLS_ORDERS, MOCK_CLS_RESULTS,
+  MOCK_INVOICES, MOCK_APPOINTMENTS, MOCK_STATUS_HISTORY,
+  MOCK_DISPATCH_HISTORY, MOCK_DASHBOARD_STATS, MOCK_ACTION_LOGS
+} from '../data/mockData';
+
+interface HospitalContextValue {
+  patients: Patient[];
+  doctors: Doctor[];
+  rooms: Room[];
+  services: Service[];
+  visits: Visit[];
+  queueItems: QueueItem[];
+  clsOrders: CLSOrder[];
+  clsResults: CLSResult[];
+  invoices: Invoice[];
+  appointments: Appointment[];
+  statusHistory: StatusHistoryEntry[];
+  dispatchHistory: DispatchHistoryEntry[];
+  dashboardStats: DashboardStats;
+  actionLogs: ActionLog[];
+
+  // Actions
+  addPatient: (patient: Omit<Patient, 'id' | 'patientCode'>) => Patient;
+  updatePatient: (id: string, data: Partial<Patient>) => void;
+  createVisit: (patientId: string, data: Partial<Visit>) => Visit;
+  updateVisitStatus: (visitId: string, status: PatientStatus, note?: string, performedBy?: string, performedByName?: string) => void;
+  dispatchPatient: (visitId: string, toRoomId: string, followedSuggestion: boolean, reason: string, dispatchedBy: string, dispatchedByName: string) => void;
+  callPatient: (queueItemId: string, roomId: string) => void;
+  completeVisit: (visitId: string, finalDiagnosis: string, conclusion: string, doctorId: string, treatmentPlan?: string, performedByName?: string) => void;
+  orderCLS: (visitId: string, patientId: string, patientName: string, orders: Array<{ serviceId: string; serviceName: string; roomId: string; priority: 'URGENT' | 'ROUTINE'; clinicalNote?: string }>, orderedBy: string) => void;
+  updateCLSStatus: (orderId: string, status: CLSOrder['status']) => void;
+  saveCLSResult: (orderId: string, visitId: string, result: string, isAbnormal: boolean, performedBy: string, note?: string) => void;
+  updateDoctorInfo: (visitId: string, data: { chiefComplaint?: string; provisionalDiagnosis?: string; notes?: string; treatmentDirection?: string }) => void;
+  cancelVisit: (visitId: string, reason: string, performedBy: string, performedByName: string) => void;
+  // Nurse/coordinator actions
+  callQueuePatient: (queueItemId: string, performedBy: string, performedByName: string) => void;
+  startPatientService: (visitId: string, queueItemId: string, performedBy: string, performedByName: string) => void;
+  markPatientNoShow: (visitId: string, queueItemId: string, performedBy: string, performedByName: string) => void;
+  transferWaitingPatient: (visitId: string, queueItemId: string, toRoomId: string, reason: string, performedBy: string, performedByName: string) => void;
+  acceptReallocationSuggestion: (visitId: string, queueItemId: string, toRoomId: string, performedBy: string, performedByName: string) => void;
+  dismissReallocationSuggestion: (visitId: string, reason: string, performedBy: string, performedByName: string) => void;
+}
+
+const HospitalContext = createContext<HospitalContextValue | null>(null);
+
+function generateId(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function formatTime() {
+  return new Date().toTimeString().slice(0, 8);
+}
+
+export function HospitalProvider({ children }: { children: React.ReactNode }) {
+  const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
+  const [doctors] = useState<Doctor[]>(MOCK_DOCTORS);
+  const [rooms, setRooms] = useState<Room[]>(MOCK_ROOMS);
+  const [services] = useState<Service[]>(MOCK_SERVICES);
+  const [visits, setVisits] = useState<Visit[]>(MOCK_VISITS);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>(MOCK_QUEUE_ITEMS);
+  const [clsOrders, setClsOrders] = useState<CLSOrder[]>(MOCK_CLS_ORDERS);
+  const [clsResults, setClsResults] = useState<CLSResult[]>(MOCK_CLS_RESULTS);
+  const [invoices] = useState<Invoice[]>(MOCK_INVOICES);
+  const [appointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryEntry[]>(MOCK_STATUS_HISTORY);
+  const [dispatchHistory, setDispatchHistory] = useState<DispatchHistoryEntry[]>(MOCK_DISPATCH_HISTORY);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats>(MOCK_DASHBOARD_STATS);
+  const [actionLogs, setActionLogs] = useState<ActionLog[]>(MOCK_ACTION_LOGS);
+
+  const addPatient = useCallback((data: Omit<Patient, 'id' | 'patientCode'>) => {
+    const id = generateId('p');
+    const patientCode = `BN${String(patients.length + 1).padStart(3, '0')}`;
+    const newPatient: Patient = { id, patientCode, ...data };
+    setPatients(prev => [...prev, newPatient]);
+    return newPatient;
+  }, [patients.length]);
+
+  const updatePatient = useCallback((id: string, data: Partial<Patient>) => {
+    setPatients(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  }, []);
+
+  const createVisit = useCallback((patientId: string, data: Partial<Visit>) => {
+    const patient = patients.find(p => p.id === patientId);
+    const visitCount = visits.length + 1;
+    const lanePrefix = data.lane === 'APPOINTMENT' ? 'A' : data.lane === 'PRIORITY' ? 'P' : 'N';
+    const ticketNumber = `${lanePrefix}${String(visitCount).padStart(3, '0')}`;
+    const newVisit: Visit = {
+      id: generateId('v'),
+      patientId,
+      patientName: patient?.name ?? '',
+      ticketNumber,
+      visitDate: new Date().toISOString().slice(0, 10),
+      status: 'WAITING_EXAM',
+      lane: data.lane ?? 'NORMAL',
+      priorityScore: data.priorityScore ?? 50,
+      checkInTime: formatTime(),
+      ...data,
+    };
+    setVisits(prev => [...prev, newVisit]);
+    // Add to queue
+    const newQueueItem: QueueItem = {
+      id: generateId('q'),
+      visitId: newVisit.id,
+      patientId,
+      patientName: patient?.name ?? '',
+      patientAge: patient?.age ?? 0,
+      patientGender: patient?.gender ?? 'MALE',
+      ticketNumber,
+      lane: newVisit.lane,
+      priorityScore: newVisit.priorityScore,
+      priorityReason: data.priorityReason,
+      status: 'WAITING_EXAM',
+      targetRoomId: data.roomId ?? '',
+      targetDoctorId: data.doctorId,
+      queuedAt: formatTime(),
+      estimatedWaitMinutes: 30,
+    };
+    setQueueItems(prev => [...prev, newQueueItem]);
+    setDashboardStats(prev => ({ ...prev, totalPatientsToday: prev.totalPatientsToday + 1, waitingExam: prev.waitingExam + 1, dispatchCount: prev.dispatchCount + 1 }));
+    return newVisit;
+  }, [patients, visits.length]);
+
+  const updateVisitStatus = useCallback((visitId: string, status: PatientStatus, note?: string, performedBy = 'system', performedByName = 'Hệ thống') => {
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status } : v));
+    setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status } : q));
+    setStatusHistory(prev => [...prev, {
+      id: generateId('sh'),
+      visitId,
+      toStatus: status,
+      timestamp: formatTime(),
+      performedBy,
+      performedByName,
+      note,
+    }]);
+  }, []);
+
+  const dispatchPatient = useCallback((visitId: string, toRoomId: string, followedSuggestion: boolean, reason: string, dispatchedBy: string, dispatchedByName: string) => {
+    const visit = visits.find(v => v.id === visitId);
+    const toRoom = rooms.find(r => r.id === toRoomId);
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+    setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, targetRoomId: toRoomId } : q));
+    if (toRoom) {
+      setRooms(prev => prev.map(r => r.id === toRoomId ? { ...r, currentWaiting: r.currentWaiting + 1 } : r));
+    }
+    setDispatchHistory(prev => [...prev, {
+      id: generateId('dh'),
+      visitId,
+      patientId: visit?.patientId ?? '',
+      patientName: visit?.patientName ?? '',
+      fromRoomId: visit?.roomId,
+      toRoomId,
+      toRoomName: toRoom?.name ?? '',
+      followedSuggestion,
+      reason,
+      dispatchedBy,
+      dispatchedByName,
+      dispatchedAt: formatTime(),
+    }]);
+    setDashboardStats(prev => ({ ...prev, dispatchCount: prev.dispatchCount + 1 }));
+  }, [visits, rooms]);
+
+  const callPatient = useCallback((queueItemId: string, _roomId: string) => {
+    setQueueItems(prev => prev.map(q => q.id === queueItemId ? { ...q, calledAt: formatTime() } : q));
+  }, []);
+
+  const completeVisit = useCallback((visitId: string, finalDiagnosis: string, conclusion: string, doctorId: string, treatmentPlan?: string, performedByName = 'Bác sĩ') => {
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, finalDiagnosis, conclusion, treatmentPlan, status: 'WAITING_PAYMENT', doctorId, completionTime: formatTime() } : v));
+    setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status: 'WAITING_PAYMENT' } : q));
+    setStatusHistory(prev => [...prev, {
+      id: generateId('sh'),
+      visitId,
+      toStatus: 'WAITING_PAYMENT',
+      timestamp: formatTime(),
+      performedBy: doctorId,
+      performedByName,
+      note: 'Hoàn tất kết luận - chuyển chờ thanh toán',
+    }]);
+  }, []);
+
+  const orderCLS = useCallback((visitId: string, patientId: string, patientName: string, orders: Array<{ serviceId: string; serviceName: string; roomId: string; priority: 'URGENT' | 'ROUTINE'; clinicalNote?: string }>, orderedBy: string) => {
+    const newOrders: CLSOrder[] = orders.map(o => ({
+      id: generateId('cls'),
+      visitId,
+      patientId,
+      patientName,
+      serviceId: o.serviceId,
+      serviceName: o.serviceName,
+      roomId: o.roomId,
+      priority: o.priority,
+      status: 'PENDING' as const,
+      orderedBy,
+      orderedAt: formatTime(),
+      clinicalNote: o.clinicalNote,
+    }));
+    setClsOrders(prev => [...prev, ...newOrders]);
+    setVisits(prev => prev.map(v => v.id === visitId ? {
+      ...v,
+      status: 'WAITING_CLS',
+      clsOrders: [...(v.clsOrders ?? []), ...newOrders.map(o => o.id)],
+    } : v));
+    updateVisitStatus(visitId, 'WAITING_CLS', 'Chỉ định CLS', orderedBy);
+    setDashboardStats(prev => ({ ...prev, waitingCLS: prev.waitingCLS + 1 }));
+  }, [updateVisitStatus]);
+
+  const updateCLSStatus = useCallback((orderId: string, status: CLSOrder['status']) => {
+    setClsOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+  }, []);
+
+  const saveCLSResult = useCallback((orderId: string, visitId: string, result: string, isAbnormal: boolean, performedBy: string, note?: string) => {
+    const newResult: CLSResult = {
+      id: generateId('res'),
+      orderId,
+      visitId,
+      result,
+      isAbnormal,
+      performedBy,
+      performedAt: formatTime(),
+      note,
+    };
+    setClsResults(prev => [...prev, newResult]);
+    setClsOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'COMPLETED', completedAt: formatTime(), resultId: newResult.id } : o));
+    // Check if all CLS for this visit are done
+    const visitOrders = clsOrders.filter(o => o.visitId === visitId && o.id !== orderId);
+    const allDone = visitOrders.every(o => o.status === 'COMPLETED' || o.status === 'CANCELLED');
+    if (allDone) {
+      setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: 'WAITING_CONCLUSION' } : v));
+      setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status: 'WAITING_CONCLUSION', lane: 'AFTER_CLS' } : q));
+    }
+  }, [clsOrders]);
+
+  const updateDoctorInfo = useCallback((visitId: string, data: { chiefComplaint?: string; provisionalDiagnosis?: string; notes?: string; treatmentDirection?: string }) => {
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, ...data } : v));
+  }, []);
+
+  const cancelVisit = useCallback((visitId: string, _reason: string, performedBy: string, performedByName: string) => {
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: 'CANCELLED' } : v));
+    setQueueItems(prev => prev.filter(q => q.visitId !== visitId));
+    setStatusHistory(prev => [...prev, {
+      id: generateId('sh'),
+      visitId,
+      toStatus: 'CANCELLED',
+      timestamp: formatTime(),
+      performedBy,
+      performedByName,
+      note: _reason,
+    }]);
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'CANCEL_VISIT',
+      visitId,
+      patientId: '',
+      patientName: '',
+      reason: _reason,
+      createdAt: formatTime(),
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+  }, []);
+
+  // ===== NURSE / COORDINATOR ACTIONS =====
+
+  const callQueuePatient = useCallback((queueItemId: string, performedBy: string, performedByName: string) => {
+    const calledAt = formatTime();
+    setQueueItems(prev => prev.map(q =>
+      q.id === queueItemId ? { ...q, calledAt } : q
+    ));
+    const q = queueItems.find(qi => qi.id === queueItemId);
+    if (q) {
+      setActionLogs(prev => [...prev, {
+        id: generateId('al'),
+        actionType: 'CALL_PATIENT',
+        visitId: q.visitId,
+        patientId: q.patientId,
+        patientName: q.patientName,
+        fromStatus: q.status,
+        createdAt: calledAt,
+        createdBy: performedBy,
+        createdByName: performedByName,
+      }]);
+    }
+  }, [queueItems]);
+
+  const startPatientService = useCallback((visitId: string, queueItemId: string, performedBy: string, performedByName: string) => {
+    const visit = visits.find(v => v.id === visitId);
+    if (!visit) return;
+    const statusMap: Partial<Record<PatientStatus, PatientStatus>> = {
+      WAITING_EXAM: 'IN_EXAM',
+      WAITING_CLS: 'IN_CLS',
+      WAITING_CONCLUSION: 'IN_CONCLUSION',
+    };
+    const nextStatus = statusMap[visit.status];
+    if (!nextStatus) return;
+    const servedAt = formatTime();
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: nextStatus } : v));
+    setQueueItems(prev => prev.map(q => q.id === queueItemId ? { ...q, status: nextStatus, servedAt } : q));
+    setStatusHistory(prev => [...prev, {
+      id: generateId('sh'),
+      visitId,
+      fromStatus: visit.status,
+      toStatus: nextStatus,
+      timestamp: servedAt,
+      performedBy,
+      performedByName,
+      note: 'Bắt đầu phục vụ',
+    }]);
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'START_SERVICE',
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromStatus: visit.status,
+      toStatus: nextStatus,
+      createdAt: servedAt,
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+  }, [visits]);
+
+  const markPatientNoShow = useCallback((visitId: string, queueItemId: string, performedBy: string, performedByName: string) => {
+    const noShowAt = formatTime();
+    const q = queueItems.find(qi => qi.id === queueItemId);
+    // Re-queue at the end with new queuedAt so they go to bottom
+    setQueueItems(prev => prev.map(qi =>
+      qi.id === queueItemId
+        ? { ...qi, calledAt: undefined, queuedAt: noShowAt, noShowCount: (qi.noShowCount ?? 0) + 1, estimatedWaitMinutes: qi.estimatedWaitMinutes + 15 }
+        : qi
+    ));
+    setStatusHistory(prev => [...prev, {
+      id: generateId('sh'),
+      visitId,
+      toStatus: q?.status ?? 'WAITING_EXAM',
+      timestamp: noShowAt,
+      performedBy,
+      performedByName,
+      note: `Không có mặt (lần ${(q?.noShowCount ?? 0) + 1}) - đưa xuống cuối hàng`,
+    }]);
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'NO_SHOW',
+      visitId,
+      patientId: q?.patientId ?? '',
+      patientName: q?.patientName ?? '',
+      fromStatus: q?.status,
+      reason: 'Không có mặt khi gọi - đưa xuống cuối hàng',
+      createdAt: noShowAt,
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+  }, [queueItems]);
+
+  const transferWaitingPatient = useCallback((visitId: string, queueItemId: string, toRoomId: string, reason: string, performedBy: string, performedByName: string) => {
+    const visit = visits.find(v => v.id === visitId);
+    const toRoom = rooms.find(r => r.id === toRoomId);
+    const q = queueItems.find(qi => qi.id === queueItemId);
+    if (!visit || !toRoom) return;
+    // Only allow for waiting patients
+    const waitingStatuses: PatientStatus[] = ['WAITING_EXAM', 'WAITING_CLS', 'WAITING_CONCLUSION', 'WAITING_RESULT'];
+    if (!waitingStatuses.includes(visit.status)) return;
+    const fromRoomId = visit.roomId;
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+    setQueueItems(prev => prev.map(qi => qi.id === queueItemId ? { ...qi, targetRoomId: toRoomId } : qi));
+    if (toRoom) {
+      setRooms(prev => prev.map(r => r.id === toRoomId ? { ...r, currentWaiting: r.currentWaiting + 1 } : r));
+      if (fromRoomId) {
+        setRooms(prev => prev.map(r => r.id === fromRoomId ? { ...r, currentWaiting: Math.max(0, r.currentWaiting - 1) } : r));
+      }
+    }
+    setDispatchHistory(prev => [...prev, {
+      id: generateId('dh'),
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromRoomId,
+      toRoomId,
+      toRoomName: toRoom.name,
+      followedSuggestion: false,
+      reason,
+      dispatchedBy: performedBy,
+      dispatchedByName: performedByName,
+      dispatchedAt: formatTime(),
+    }]);
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'TRANSFER_ROOM',
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromStatus: visit.status,
+      fromRoomId,
+      toRoomId,
+      reason,
+      createdAt: formatTime(),
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+    setDashboardStats(prev => ({ ...prev, dispatchCount: prev.dispatchCount + 1 }));
+  }, [visits, rooms, queueItems]);
+
+  const acceptReallocationSuggestion = useCallback((visitId: string, queueItemId: string, toRoomId: string, performedBy: string, performedByName: string) => {
+    const visit = visits.find(v => v.id === visitId);
+    const toRoom = rooms.find(r => r.id === toRoomId);
+    const q = queueItems.find(qi => qi.id === queueItemId);
+    if (!visit || !toRoom) return;
+    const fromRoomId = visit.roomId;
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+    setQueueItems(prev => prev.map(qi => qi.id === queueItemId ? { ...qi, targetRoomId: toRoomId } : qi));
+    setRooms(prev => prev.map(r => {
+      if (r.id === toRoomId) return { ...r, currentWaiting: r.currentWaiting + 1 };
+      if (fromRoomId && r.id === fromRoomId) return { ...r, currentWaiting: Math.max(0, r.currentWaiting - 1) };
+      return r;
+    }));
+    setDispatchHistory(prev => [...prev, {
+      id: generateId('dh'),
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromRoomId,
+      toRoomId,
+      toRoomName: toRoom.name,
+      followedSuggestion: true,
+      reason: 'Xác nhận gợi ý tái phân bổ - giảm tải phòng',
+      dispatchedBy: performedBy,
+      dispatchedByName: performedByName,
+      dispatchedAt: formatTime(),
+    }]);
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'ACCEPT_REALLOCATION',
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromStatus: visit.status,
+      fromRoomId,
+      toRoomId,
+      reason: 'Xác nhận gợi ý tái phân bổ',
+      createdAt: formatTime(),
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+    setDashboardStats(prev => ({ ...prev, dispatchCount: prev.dispatchCount + 1 }));
+  }, [visits, rooms, queueItems]);
+
+  const dismissReallocationSuggestion = useCallback((visitId: string, reason: string, performedBy: string, performedByName: string) => {
+    const visit = visits.find(v => v.id === visitId);
+    if (!visit) return;
+    setActionLogs(prev => [...prev, {
+      id: generateId('al'),
+      actionType: 'DISMISS_REALLOCATION',
+      visitId,
+      patientId: visit.patientId,
+      patientName: visit.patientName,
+      fromStatus: visit.status,
+      reason: reason || 'Bỏ qua gợi ý tái phân bổ',
+      createdAt: formatTime(),
+      createdBy: performedBy,
+      createdByName: performedByName,
+    }]);
+  }, [visits]);
+
+  return (
+    <HospitalContext.Provider value={{
+      patients, doctors, rooms, services, visits, queueItems,
+      clsOrders, clsResults, invoices, appointments,
+      statusHistory, dispatchHistory, dashboardStats, actionLogs,
+      addPatient, updatePatient, createVisit, updateVisitStatus,
+      dispatchPatient, callPatient, completeVisit, orderCLS,
+      updateCLSStatus, saveCLSResult, updateDoctorInfo, cancelVisit,
+      callQueuePatient, startPatientService, markPatientNoShow,
+      transferWaitingPatient, acceptReallocationSuggestion, dismissReallocationSuggestion,
+    }}>
+      {children}
+    </HospitalContext.Provider>
+  );
+}
+
+export function useHospital() {
+  const ctx = useContext(HospitalContext);
+  if (!ctx) throw new Error('useHospital must be used within HospitalProvider');
+  return ctx;
+}
+
+
+
+==================== src\data\mockData.ts ====================
+import type {
+  User, Patient, Doctor, Room, Service, Visit, QueueItem,
+  CLSOrder, CLSResult, Invoice, Appointment, StatusHistoryEntry,
+  DispatchHistoryEntry, RoomSnapshot, DashboardStats, ActionLog
+} from '../types';
+
+// ===== USERS =====
+export const MOCK_USERS: User[] = [
+  { id: 'u1', name: 'Nguyễn Văn Quản Trị', username: 'admin', role: 'ADMIN', department: 'Ban Giám Đốc' },
+  { id: 'u2', name: 'Trần Thị Lễ Tân', username: 'letan', role: 'RECEPTIONIST', department: 'Tiếp Nhận' },
+  { id: 'u3', name: 'Lê Văn Điều Phối', username: 'dieuphoi', role: 'COORDINATOR', department: 'Điều Dưỡng' },
+  { id: 'u4', name: 'BS. Phạm Hoài Nam', username: 'bsnam', role: 'DOCTOR', department: 'Nội Tổng Quát', roomId: 'r1' },
+  { id: 'u5', name: 'BS. Nguyễn Thu Hương', username: 'bshuong', role: 'DOCTOR', department: 'Tim Mạch', roomId: 'r2' },
+  { id: 'u6', name: 'BS. Lê Đức Minh', username: 'bsminh', role: 'DOCTOR', department: 'Nhi Khoa', roomId: 'r3' },
+  { id: 'u7', name: 'Kỹ thuật viên XN', username: 'ktvxn', role: 'LAB_STAFF', department: 'Xét Nghiệm', roomId: 'r9' },
+  { id: 'u8', name: 'Nguyễn Thị Quản Lý', username: 'quanly', role: 'MANAGER', department: 'Ban Giám Đốc' },
+];
+
+// ===== DEMO ACCOUNTS =====
+export const DEMO_CREDENTIALS: Record<string, { password: string; userId: string }> = {
+  admin: { password: 'admin123', userId: 'u1' },
+  letan: { password: 'letan123', userId: 'u2' },
+  dieuphoi: { password: 'dp123', userId: 'u3' },
+  bsnam: { password: 'bs123', userId: 'u4' },
+  bshuong: { password: 'bs123', userId: 'u5' },
+  bsminh: { password: 'bs123', userId: 'u6' },
+  ktvxn: { password: 'ktv123', userId: 'u7' },
+  quanly: { password: 'ql123', userId: 'u8' },
+};
+
+// ===== PATIENTS =====
+export const MOCK_PATIENTS: Patient[] = [
+  { id: 'p1', patientCode: 'BN001', name: 'Nguyễn Văn An', dateOfBirth: '1985-03-15', age: 39, gender: 'MALE', idNumber: '079085001234', phone: '0901234567', address: 'Q1, TP.HCM', insurance: 'DN4512345' },
+  { id: 'p2', patientCode: 'BN002', name: 'Trần Thị Bình', dateOfBirth: '1990-07-22', age: 34, gender: 'FEMALE', idNumber: '079090002345', phone: '0912345678', address: 'Q3, TP.HCM', priorityReason: 'PREGNANT' },
+  { id: 'p3', patientCode: 'BN003', name: 'Lê Văn Cường', dateOfBirth: '1945-11-08', age: 79, gender: 'MALE', idNumber: '079045003456', phone: '0923456789', address: 'Q5, TP.HCM', insurance: 'HS9876543', priorityReason: 'ELDERLY_75PLUS' },
+  { id: 'p4', patientCode: 'BN004', name: 'Phạm Thị Dung', dateOfBirth: '2020-04-10', age: 4, gender: 'FEMALE', idNumber: '', phone: '0934567890', address: 'Bình Thạnh, TP.HCM', priorityReason: 'CHILD_UNDER_6' },
+  { id: 'p5', patientCode: 'BN005', name: 'Hoàng Minh Đức', dateOfBirth: '1978-09-28', age: 46, gender: 'MALE', idNumber: '079078005678', phone: '0945678901', address: 'Q7, TP.HCM', insurance: 'BH1234567' },
+  { id: 'p6', patientCode: 'BN006', name: 'Nguyễn Thị Hoa', dateOfBirth: '1965-01-14', age: 59, gender: 'FEMALE', idNumber: '079065006789', phone: '0956789012', address: 'Tân Bình, TP.HCM', priorityReason: 'VETERAN' },
+  { id: 'p7', patientCode: 'BN007', name: 'Vũ Văn Hùng', dateOfBirth: '1992-06-03', age: 32, gender: 'MALE', idNumber: '079092007890', phone: '0967890123', address: 'Gò Vấp, TP.HCM' },
+  { id: 'p8', patientCode: 'BN008', name: 'Đặng Thị Kim', dateOfBirth: '1955-12-25', age: 69, gender: 'FEMALE', idNumber: '079055008901', phone: '0978901234', address: 'Q10, TP.HCM', insurance: 'HT5678901' },
+  { id: 'p9', patientCode: 'BN009', name: 'Bùi Quốc Long', dateOfBirth: '2000-08-17', age: 24, gender: 'MALE', idNumber: '079000009012', phone: '0989012345', address: 'Thủ Đức, TP.HCM' },
+  { id: 'p10', patientCode: 'BN010', name: 'Lý Thị Mai', dateOfBirth: '1988-05-30', age: 36, gender: 'FEMALE', idNumber: '079088010123', phone: '0990123456', address: 'Phú Nhuận, TP.HCM', priorityReason: 'DISABLED' },
+  { id: 'p11', patientCode: 'BN011', name: 'Trương Văn Nam', dateOfBirth: '1972-02-19', age: 52, gender: 'MALE', idNumber: '079072011234', phone: '0901234568', address: 'Q4, TP.HCM', insurance: 'QD2345678' },
+  { id: 'p12', patientCode: 'BN012', name: 'Võ Thị Oanh', dateOfBirth: '1995-10-07', age: 29, gender: 'FEMALE', idNumber: '079095012345', phone: '0912345679', address: 'Q6, TP.HCM' },
+  { id: 'p13', patientCode: 'BN013', name: 'Đỗ Minh Phúc', dateOfBirth: '1968-03-22', age: 56, gender: 'MALE', idNumber: '079068013456', phone: '0923456780', address: 'Bình Chánh, TP.HCM', insurance: 'HK3456789' },
+  { id: 'p14', patientCode: 'BN014', name: 'Hồ Thị Quỳnh', dateOfBirth: '1982-11-11', age: 42, gender: 'FEMALE', idNumber: '079082014567', phone: '0934567891', address: 'Q8, TP.HCM' },
+  { id: 'p15', patientCode: 'BN015', name: 'Phan Văn Sơn', dateOfBirth: '2021-07-04', age: 3, gender: 'MALE', idNumber: '', phone: '0945678902', address: 'Q12, TP.HCM', priorityReason: 'CHILD_UNDER_6', insurance: 'TE6789012' },
+  { id: 'p16', patientCode: 'BN016', name: 'Lưu Thị Thảo', dateOfBirth: '1960-09-16', age: 64, gender: 'FEMALE', idNumber: '079060016789', phone: '0956789013', address: 'Hóc Môn, TP.HCM', insurance: 'HU7890123' },
+  { id: 'p17', patientCode: 'BN017', name: 'Mai Văn Tuấn', dateOfBirth: '1975-04-28', age: 49, gender: 'MALE', idNumber: '079075017890', phone: '0967890124', address: 'Tân Phú, TP.HCM' },
+  { id: 'p18', patientCode: 'BN018', name: 'Cao Thị Uyên', dateOfBirth: '1948-01-03', age: 76, gender: 'FEMALE', idNumber: '079048018901', phone: '0978901235', address: 'Q2, TP.HCM', priorityReason: 'ELDERLY_75PLUS', insurance: 'NC8901234' },
+  { id: 'p19', patientCode: 'BN019', name: 'Đinh Quang Vinh', dateOfBirth: '1998-06-21', age: 26, gender: 'MALE', idNumber: '079098019012', phone: '0989012346', address: 'Q9, TP.HCM' },
+  { id: 'p20', patientCode: 'BN020', name: 'Trịnh Thị Xuân', dateOfBirth: '1991-12-09', age: 33, gender: 'FEMALE', idNumber: '079091020123', phone: '0990123457', address: 'Nhà Bè, TP.HCM', priorityReason: 'EMERGENCY' },
+  { id: 'p21', patientCode: 'BN021', name: 'Lâm Thanh Phong', dateOfBirth: '1980-06-15', age: 44, gender: 'MALE', idNumber: '079080021234', phone: '0901234599', address: 'Q1, TP.HCM', insurance: 'BN0001234' },
+];
+
+// ===== DOCTORS =====
+export const MOCK_DOCTORS: Doctor[] = [
+  { id: 'd1', name: 'BS. Phạm Hoài Nam', specialty: 'Nội Tổng Quát', department: 'Nội Tổng Quát', roomId: 'r1', status: 'BUSY', qualifications: 'CKI Nội Khoa' },
+  { id: 'd2', name: 'BS. Nguyễn Thu Hương', specialty: 'Tim Mạch', department: 'Tim Mạch', roomId: 'r2', status: 'AVAILABLE', qualifications: 'CKII Tim Mạch' },
+  { id: 'd3', name: 'BS. Lê Đức Minh', specialty: 'Nhi Khoa', department: 'Nhi Khoa', roomId: 'r3', status: 'BUSY', qualifications: 'CKI Nhi Khoa' },
+  { id: 'd4', name: 'BS. Đặng Hoàng Phú', specialty: 'Nội Tổng Quát', department: 'Nội Tổng Quát', roomId: 'r4', status: 'BUSY', qualifications: 'ThS Nội Khoa' },
+  { id: 'd5', name: 'BS. Vũ Thị Lan', specialty: 'Tai Mũi Họng', department: 'Tai Mũi Họng', roomId: 'r5', status: 'AVAILABLE', qualifications: 'CKI TMH' },
+  { id: 'd6', name: 'BS. Lý Văn Phong', specialty: 'Da Liễu', department: 'Da Liễu', roomId: 'r6', status: 'BREAK', qualifications: 'CKII Da Liễu' },
+  { id: 'd7', name: 'BS. Hồ Thị Nga', specialty: 'Sản Phụ Khoa', department: 'Sản Phụ Khoa', roomId: 'r7', status: 'BUSY', qualifications: 'CKII Sản Phụ Khoa' },
+  { id: 'd8', name: 'BS. Bùi Công Thắng', specialty: 'Xương Khớp', department: 'Xương Khớp', roomId: 'r8', status: 'AVAILABLE', qualifications: 'CKI Ngoại Khoa' },
+];
+
+// ===== ROOMS =====
+export const MOCK_ROOMS: Room[] = [
+  { id: 'r1', name: 'Phòng Khám 101', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 1', doctorId: 'd1', capacity: 15, currentWaiting: 8, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 42, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 73 },
+  { id: 'r2', name: 'Phòng Khám 102', type: 'EXAM', department: 'Tim Mạch', floor: 'Tầng 1', doctorId: 'd2', capacity: 12, currentWaiting: 3, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 18, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+  { id: 'r3', name: 'Phòng Khám 103', type: 'EXAM', department: 'Nhi Khoa', floor: 'Tầng 1', doctorId: 'd3', capacity: 15, currentWaiting: 12, currentServing: 1, avgServiceMinutes: 12, avgWaitMinutes: 68, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 87 },
+  { id: 'r4', name: 'Phòng Khám 104', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 1', doctorId: 'd4', capacity: 15, currentWaiting: 7, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 38, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 60 },
+  { id: 'r5', name: 'Phòng Khám 201', type: 'EXAM', department: 'Tai Mũi Họng', floor: 'Tầng 2', doctorId: 'd5', capacity: 10, currentWaiting: 2, currentServing: 0, avgServiceMinutes: 10, avgWaitMinutes: 10, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 20 },
+  { id: 'r6', name: 'Phòng Khám 202', type: 'EXAM', department: 'Da Liễu', floor: 'Tầng 2', doctorId: 'd6', capacity: 10, currentWaiting: 0, currentServing: 0, avgServiceMinutes: 12, avgWaitMinutes: 0, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 0 },
+  { id: 'r7', name: 'Phòng Khám 203', type: 'EXAM', department: 'Sản Phụ Khoa', floor: 'Tầng 2', doctorId: 'd7', capacity: 12, currentWaiting: 9, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 72, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 83 },
+  { id: 'r8', name: 'Phòng Khám 204', type: 'EXAM', department: 'Xương Khớp', floor: 'Tầng 2', doctorId: 'd8', capacity: 12, currentWaiting: 4, currentServing: 0, avgServiceMinutes: 18, avgWaitMinutes: 24, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+  { id: 'r9', name: 'Phòng Xét Nghiệm', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 20, currentWaiting: 11, currentServing: 3, avgServiceMinutes: 8, avgWaitMinutes: 35, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 70 },
+  { id: 'r10', name: 'Phòng XN Huyết Học', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 15, currentWaiting: 5, currentServing: 2, avgServiceMinutes: 10, avgWaitMinutes: 20, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 47 },
+  { id: 'r11', name: 'Phòng Siêu Âm', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 8, currentWaiting: 7, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 80, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 100 },
+  { id: 'r12', name: 'Phòng X-Quang', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng B1', capacity: 15, currentWaiting: 4, currentServing: 1, avgServiceMinutes: 10, avgWaitMinutes: 25, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+  { id: 'r13', name: 'Phòng Điện Tim', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 10, currentWaiting: 2, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 15, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 30 },
+  { id: 'r14', name: 'Phòng CT Scanner', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng B1', capacity: 6, currentWaiting: 5, currentServing: 1, avgServiceMinutes: 25, avgWaitMinutes: 75, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 100 },
+  { id: 'r15', name: 'Phòng Khám Tổng Quát VIP', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 3', capacity: 6, currentWaiting: 1, currentServing: 1, avgServiceMinutes: 30, avgWaitMinutes: 15, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+];
+
+// ===== SERVICES =====
+export const MOCK_SERVICES: Service[] = [
+  { id: 's1', code: 'KB001', name: 'Khám Nội Tổng Quát', type: 'EXAM', department: 'Nội Tổng Quát', price: 150000, durationMinutes: 15, roomIds: ['r1', 'r4', 'r15'] },
+  { id: 's2', code: 'KB002', name: 'Khám Tim Mạch', type: 'EXAM', department: 'Tim Mạch', price: 200000, durationMinutes: 20, roomIds: ['r2'] },
+  { id: 's3', code: 'KB003', name: 'Khám Nhi Khoa', type: 'EXAM', department: 'Nhi Khoa', price: 150000, durationMinutes: 12, roomIds: ['r3'] },
+  { id: 's4', code: 'KB004', name: 'Khám Tai Mũi Họng', type: 'EXAM', department: 'Tai Mũi Họng', price: 150000, durationMinutes: 10, roomIds: ['r5'] },
+  { id: 's5', code: 'KB005', name: 'Khám Da Liễu', type: 'EXAM', department: 'Da Liễu', price: 150000, durationMinutes: 12, roomIds: ['r6'] },
+  { id: 's6', code: 'KB006', name: 'Khám Sản Phụ Khoa', type: 'EXAM', department: 'Sản Phụ Khoa', price: 200000, durationMinutes: 20, roomIds: ['r7'] },
+  { id: 's7', code: 'KB007', name: 'Khám Xương Khớp', type: 'EXAM', department: 'Xương Khớp', price: 150000, durationMinutes: 18, roomIds: ['r8'] },
+  { id: 's8', code: 'XN001', name: 'Xét Nghiệm Máu Tổng Quát', type: 'LAB', department: 'Cận Lâm Sàng', price: 180000, durationMinutes: 8, roomIds: ['r9', 'r10'] },
+  { id: 's9', code: 'XN002', name: 'Sinh Hóa Máu', type: 'LAB', department: 'Cận Lâm Sàng', price: 250000, durationMinutes: 10, roomIds: ['r9'] },
+  { id: 's10', code: 'XN003', name: 'Tổng Phân Tích Nước Tiểu', type: 'LAB', department: 'Cận Lâm Sàng', price: 100000, durationMinutes: 8, roomIds: ['r9'] },
+  { id: 's11', code: 'XN004', name: 'Huyết Học Tổng Quát', type: 'LAB', department: 'Cận Lâm Sàng', price: 120000, durationMinutes: 10, roomIds: ['r10'] },
+  { id: 's12', code: 'SA001', name: 'Siêu Âm Ổ Bụng', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 300000, durationMinutes: 20, roomIds: ['r11'] },
+  { id: 's13', code: 'SA002', name: 'Siêu Âm Tim', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 350000, durationMinutes: 25, roomIds: ['r11'] },
+  { id: 's14', code: 'XQ001', name: 'X-Quang Ngực Thẳng', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 150000, durationMinutes: 10, roomIds: ['r12'] },
+  { id: 's15', code: 'XQ002', name: 'X-Quang Cột Sống', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 200000, durationMinutes: 12, roomIds: ['r12'] },
+  { id: 's16', code: 'DT001', name: 'Điện Tim 12 Chuyển Đạo', type: 'LAB', department: 'Cận Lâm Sàng', price: 120000, durationMinutes: 15, roomIds: ['r13'] },
+  { id: 's17', code: 'CT001', name: 'Chụp CT Đầu', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 900000, durationMinutes: 25, roomIds: ['r14'] },
+  { id: 's18', code: 'CT002', name: 'Chụp CT Ngực', type: 'IMAGING', department: 'Cận Lâm Sàng', price: 1200000, durationMinutes: 30, roomIds: ['r14'] },
+  { id: 's19', code: 'XN005', name: 'Đông Máu Cơ Bản', type: 'LAB', department: 'Cận Lâm Sàng', price: 150000, durationMinutes: 10, roomIds: ['r10'] },
+  { id: 's20', code: 'XN006', name: 'Nhóm Máu ABO+Rh', type: 'LAB', department: 'Cận Lâm Sàng', price: 80000, durationMinutes: 8, roomIds: ['r9', 'r10'] },
+];
+
+// ===== VISITS (active today) =====
+export const MOCK_VISITS: Visit[] = [
+  { id: 'v1', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'A001', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau đầu, chóng mặt', doctorId: 'd1', roomId: 'r1', checkInTime: '07:45:00' },
+  { id: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', ticketNumber: 'P001', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'PRIORITY', priorityReason: 'PREGNANT', priorityScore: 90, chiefComplaint: 'Khám thai định kỳ', provisionalDiagnosis: 'Thai 28 tuần', doctorId: 'd7', roomId: 'r7', checkInTime: '07:30:00', clsOrders: ['cls1', 'cls2'] },
+  { id: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', ticketNumber: 'P002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'ELDERLY_75PLUS', priorityScore: 85, chiefComplaint: 'Tức ngực, khó thở', doctorId: 'd2', roomId: 'r2', checkInTime: '08:00:00' },
+  { id: 'v4', patientId: 'p4', patientName: 'Phạm Thị Dung', ticketNumber: 'P003', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'PRIORITY', priorityReason: 'CHILD_UNDER_6', priorityScore: 95, chiefComplaint: 'Sốt cao, ho', doctorId: 'd3', roomId: 'r3', checkInTime: '07:55:00' },
+  { id: 'v5', patientId: 'p5', patientName: 'Hoàng Minh Đức', ticketNumber: 'A002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'APPOINTMENT', priorityScore: 60, chiefComplaint: 'Khám kiểm tra sức khỏe', doctorId: 'd1', roomId: 'r1', checkInTime: '08:05:00', appointmentId: 'apt1' },
+  { id: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', ticketNumber: 'P004', visitDate: '2026-05-31', status: 'WAITING_CONCLUSION', lane: 'PRIORITY', priorityReason: 'VETERAN', priorityScore: 88, chiefComplaint: 'Đau khớp gối', provisionalDiagnosis: 'Nghi viêm khớp', doctorId: 'd8', roomId: 'r8', checkInTime: '07:40:00', clsOrders: ['cls3'] },
+  { id: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', ticketNumber: 'N001', visitDate: '2026-05-31', status: 'IN_CLS', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau bụng vùng thượng vị', provisionalDiagnosis: 'Nghi đau dạ dày', doctorId: 'd1', roomId: 'r1', checkInTime: '08:10:00', clsOrders: ['cls4', 'cls5'] },
+  { id: 'v8', patientId: 'p8', patientName: 'Đặng Thị Kim', ticketNumber: 'N002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Mỏi mắt, nhức đầu', roomId: 'r4', checkInTime: '08:20:00' },
+  { id: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', ticketNumber: 'N003', visitDate: '2026-05-31', status: 'WAITING_PAYMENT', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau họng, sốt nhẹ', finalDiagnosis: 'Viêm họng cấp', conclusion: 'Kê đơn thuốc 5 ngày', doctorId: 'd5', roomId: 'r5', checkInTime: '07:50:00', totalAmount: 270000 },
+  { id: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', ticketNumber: 'P005', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'PRIORITY', priorityReason: 'DISABLED', priorityScore: 87, chiefComplaint: 'Đau lưng mãn tính', provisionalDiagnosis: 'Đau thắt lưng', doctorId: 'd8', roomId: 'r8', checkInTime: '08:15:00', clsOrders: ['cls6'] },
+  { id: 'v11', patientId: 'p11', patientName: 'Trương Văn Nam', ticketNumber: 'N004', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Ho kéo dài 2 tuần', roomId: 'r1', checkInTime: '08:25:00' },
+  { id: 'v12', patientId: 'p12', patientName: 'Võ Thị Oanh', ticketNumber: 'N005', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Nổi mẩn da, ngứa', roomId: 'r6', checkInTime: '08:30:00' },
+  { id: 'v13', patientId: 'p13', patientName: 'Đỗ Minh Phúc', ticketNumber: 'A003', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'APPOINTMENT', priorityScore: 60, chiefComplaint: 'Theo dõi huyết áp', doctorId: 'd4', roomId: 'r4', checkInTime: '08:00:00', appointmentId: 'apt2' },
+  { id: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', ticketNumber: 'N006', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau bụng dưới', doctorId: 'd7', roomId: 'r7', checkInTime: '08:35:00', clsOrders: ['cls7'] },
+  { id: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', ticketNumber: 'P006', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'CHILD_UNDER_6', priorityScore: 95, chiefComplaint: 'Tiêu chảy, nôn ói', roomId: 'r3', checkInTime: '08:40:00' },
+  { id: 'v16', patientId: 'p16', patientName: 'Lưu Thị Thảo', ticketNumber: 'N007', visitDate: '2026-05-31', status: 'COMPLETED', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Tái khám sau điều trị', finalDiagnosis: 'Viêm phế quản - khỏi', doctorId: 'd1', roomId: 'r1', checkInTime: '07:00:00', completionTime: '08:15:00', totalAmount: 380000 },
+  { id: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', ticketNumber: 'N008', visitDate: '2026-05-31', status: 'WAITING_RESULT', lane: 'AFTER_CLS', priorityScore: 50, chiefComplaint: 'Chóng mặt, buồn nôn', doctorId: 'd2', roomId: 'r2', checkInTime: '08:00:00', clsOrders: ['cls8', 'cls9'] },
+  { id: 'v18', patientId: 'p18', patientName: 'Cao Thị Uyên', ticketNumber: 'P007', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'ELDERLY_75PLUS', priorityScore: 85, chiefComplaint: 'Đau đầu gối, đi lại khó', roomId: 'r2', checkInTime: '08:45:00' },
+  { id: 'v19', patientId: 'p19', patientName: 'Đinh Quang Vinh', ticketNumber: 'N009', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau dạ dày', roomId: 'r4', checkInTime: '08:50:00' },
+  { id: 'v20', patientId: 'p20', patientName: 'Trịnh Thị Xuân', ticketNumber: 'P008', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'PRIORITY', priorityReason: 'EMERGENCY', priorityScore: 100, chiefComplaint: 'Đau bụng dữ dội, huyết áp thấp', doctorId: 'd7', roomId: 'r7', checkInTime: '09:00:00' },
+  { id: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', ticketNumber: 'N010', visitDate: '2026-05-31', status: 'WAITING_CONCLUSION', lane: 'AFTER_CLS', priorityScore: 65, chiefComplaint: 'Đau đầu, chóng mặt kéo dài 2 tuần', provisionalDiagnosis: 'Nghi tăng huyết áp, theo dõi rối loạn tiền đình', doctorId: 'd1', roomId: 'r1', checkInTime: '07:30:00', clsOrders: ['cls10'] },
+  { id: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'N011', visitDate: '2026-04-18', status: 'COMPLETED', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Tái khám huyết áp', provisionalDiagnosis: 'Tăng huyết áp độ 1', finalDiagnosis: 'Tăng huyết áp độ 1', conclusion: 'Ổn định, tiếp tục theo dõi', treatmentPlan: 'Uống thuốc đều, tái khám sau 1 tháng', doctorId: 'd1', roomId: 'r1', checkInTime: '08:00:00', completionTime: '09:05:00', clsOrders: ['cls11'] },
+  { id: 'v23', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'N012', visitDate: '2026-06-10', status: 'IN_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau đầu lại', provisionalDiagnosis: 'Theo dõi tăng huyết áp', doctorId: 'd1', roomId: 'r1', checkInTime: '08:45:00' },
+];
+
+// ===== QUEUE ITEMS =====
+export const MOCK_QUEUE_ITEMS: QueueItem[] = [
+  { id: 'q1', visitId: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', patientAge: 79, patientGender: 'MALE', ticketNumber: 'P002', lane: 'PRIORITY', priorityScore: 85, priorityReason: 'ELDERLY_75PLUS', status: 'WAITING_EXAM', targetRoomId: 'r2', targetDoctorId: 'd2', queuedAt: '08:00:00', estimatedWaitMinutes: 18, chiefComplaint: 'Tức ngực, khó thở' },
+  { id: 'q2', visitId: 'v5', patientId: 'p5', patientName: 'Hoàng Minh Đức', patientAge: 46, patientGender: 'MALE', ticketNumber: 'A002', lane: 'APPOINTMENT', priorityScore: 60, status: 'WAITING_EXAM', targetRoomId: 'r1', targetDoctorId: 'd1', queuedAt: '08:05:00', estimatedWaitMinutes: 35, chiefComplaint: 'Khám kiểm tra sức khỏe', mustReturnToDoctor: true },
+  { id: 'q3', visitId: 'v8', patientId: 'p8', patientName: 'Đặng Thị Kim', patientAge: 69, patientGender: 'FEMALE', ticketNumber: 'N002', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r4', queuedAt: '08:20:00', estimatedWaitMinutes: 28, chiefComplaint: 'Mỏi mắt, nhức đầu' },
+  { id: 'q4', visitId: 'v11', patientId: 'p11', patientName: 'Trương Văn Nam', patientAge: 52, patientGender: 'MALE', ticketNumber: 'N004', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r1', queuedAt: '08:25:00', estimatedWaitMinutes: 45, chiefComplaint: 'Ho kéo dài 2 tuần' },
+  { id: 'q5', visitId: 'v12', patientId: 'p12', patientName: 'Võ Thị Oanh', patientAge: 29, patientGender: 'FEMALE', ticketNumber: 'N005', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r6', queuedAt: '08:30:00', estimatedWaitMinutes: 12, chiefComplaint: 'Nổi mẩn da, ngứa' },
+  { id: 'q6', visitId: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', patientAge: 3, patientGender: 'MALE', ticketNumber: 'P006', lane: 'PRIORITY', priorityScore: 95, priorityReason: 'CHILD_UNDER_6', status: 'WAITING_EXAM', targetRoomId: 'r3', queuedAt: '08:40:00', estimatedWaitMinutes: 20, chiefComplaint: 'Tiêu chảy, nôn ói' },
+  { id: 'q7', visitId: 'v18', patientId: 'p18', patientName: 'Cao Thị Uyên', patientAge: 76, patientGender: 'FEMALE', ticketNumber: 'P007', lane: 'PRIORITY', priorityScore: 85, priorityReason: 'ELDERLY_75PLUS', status: 'WAITING_EXAM', targetRoomId: 'r2', queuedAt: '08:45:00', estimatedWaitMinutes: 22, chiefComplaint: 'Đau đầu gối, đi lại khó' },
+  { id: 'q8', visitId: 'v19', patientId: 'p19', patientName: 'Đinh Quang Vinh', patientAge: 26, patientGender: 'MALE', ticketNumber: 'N009', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r4', queuedAt: '08:50:00', estimatedWaitMinutes: 42, chiefComplaint: 'Đau dạ dày' },
+  { id: 'q9', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', patientAge: 34, patientGender: 'FEMALE', ticketNumber: 'P001', lane: 'PRIORITY', priorityScore: 90, priorityReason: 'PREGNANT', status: 'WAITING_CLS', targetRoomId: 'r11', queuedAt: '08:10:00', estimatedWaitMinutes: 45, chiefComplaint: 'Khám thai 28 tuần' },
+  { id: 'q10', visitId: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', patientAge: 36, patientGender: 'FEMALE', ticketNumber: 'P005', lane: 'PRIORITY', priorityScore: 87, priorityReason: 'DISABLED', status: 'WAITING_CLS', targetRoomId: 'r12', queuedAt: '08:30:00', estimatedWaitMinutes: 20, chiefComplaint: 'Đau lưng mãn tính' },
+  { id: 'q11', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', patientAge: 42, patientGender: 'FEMALE', ticketNumber: 'N006', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_CLS', targetRoomId: 'r11', queuedAt: '08:50:00', estimatedWaitMinutes: 70, chiefComplaint: 'Đau bụng dưới' },
+  { id: 'q12', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', patientAge: 49, patientGender: 'MALE', ticketNumber: 'N008', lane: 'AFTER_CLS', priorityScore: 55, status: 'WAITING_RESULT', targetRoomId: 'r2', queuedAt: '08:45:00', estimatedWaitMinutes: 30, chiefComplaint: 'Chóng mặt, buồn nôn', mustReturnToDoctor: true },
+  { id: 'q13', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', patientAge: 59, patientGender: 'FEMALE', ticketNumber: 'P004', lane: 'AFTER_CLS', priorityScore: 88, priorityReason: 'VETERAN', status: 'WAITING_CONCLUSION', targetRoomId: 'r8', queuedAt: '08:30:00', estimatedWaitMinutes: 15, chiefComplaint: 'Đau khớp gối', mustReturnToDoctor: true },
+  { id: 'q14', visitId: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', patientAge: 44, patientGender: 'MALE', ticketNumber: 'N010', lane: 'AFTER_CLS', priorityScore: 65, status: 'WAITING_CONCLUSION', targetRoomId: 'r1', targetDoctorId: 'd1', queuedAt: '07:30:00', estimatedWaitMinutes: 10, chiefComplaint: 'Đau đầu, chóng mặt kéo dài', mustReturnToDoctor: true },
+  { id: 'q15', visitId: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', patientAge: 39, patientGender: 'MALE', ticketNumber: 'N011', lane: 'NORMAL', priorityScore: 50, status: 'COMPLETED', targetRoomId: 'r1', queuedAt: '08:00:00', estimatedWaitMinutes: 0, chiefComplaint: 'Tái khám huyết áp' },
+  { id: 'q16', visitId: 'v23', patientId: 'p1', patientName: 'Nguyễn Văn An', patientAge: 39, patientGender: 'MALE', ticketNumber: 'N012', lane: 'NORMAL', priorityScore: 50, status: 'IN_EXAM', targetRoomId: 'r1', queuedAt: '08:45:00', estimatedWaitMinutes: 20, chiefComplaint: 'Đau đầu lại' },
+];
+
+// ===== CLS ORDERS =====
+export const MOCK_CLS_ORDERS: CLSOrder[] = [
+  { id: 'cls1', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd7', orderedAt: '08:05:00', clinicalNote: 'Siêu âm kiểm tra thai nhi 28 tuần' },
+  { id: 'cls2', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd7', orderedAt: '08:05:00', completedAt: '08:40:00', resultId: 'res1' },
+  { id: 'cls3', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', serviceId: 's15', serviceName: 'X-Quang Cột Sống', roomId: 'r12', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd8', orderedAt: '07:55:00', completedAt: '08:25:00', resultId: 'res2' },
+  { id: 'cls4', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'IN_PROGRESS', orderedBy: 'd1', orderedAt: '08:20:00' },
+  { id: 'cls5', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd1', orderedAt: '08:20:00' },
+  { id: 'cls6', visitId: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', serviceId: 's15', serviceName: 'X-Quang Cột Sống', roomId: 'r12', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd8', orderedAt: '08:30:00' },
+  { id: 'cls7', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'URGENT', status: 'ASSIGNED', orderedBy: 'd7', orderedAt: '08:40:00', clinicalNote: 'Đau bụng dưới cần loại trừ viêm ruột thừa' },
+  { id: 'cls8', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', serviceId: 's16', serviceName: 'Điện Tim 12 Chuyển Đạo', roomId: 'r13', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd2', orderedAt: '08:10:00', completedAt: '08:35:00', resultId: 'res3' },
+  { id: 'cls9', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd2', orderedAt: '08:10:00', completedAt: '08:40:00', resultId: 'res4' },
+  { id: 'cls10', visitId: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', serviceId: 's16', serviceName: 'Điện Tim 12 Chuyển Đạo', roomId: 'r13', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd1', orderedAt: '08:00:00', completedAt: '08:50:00', resultId: 'res5', clinicalNote: 'Đau đầu, chóng mặt - kiểm tra bất thường nhịp tim' },
+  { id: 'cls11', visitId: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd1', orderedAt: '08:10:00', completedAt: '08:35:00', resultId: 'res6', clinicalNote: 'Theo dõi huyết áp, kiểm tra công thức máu' },
+];
+
+// ===== CLS RESULTS =====
+export const MOCK_CLS_RESULTS: CLSResult[] = [
+  { id: 'res1', orderId: 'cls2', visitId: 'v2', result: 'Huyết đồ: BC 8.5 K/uL, HC 3.8 M/uL, Hb 11.2 g/dL, Hct 33.5%, TC 185 K/uL. Nhận xét: Thiếu máu nhẹ do thiếu sắt', isAbnormal: true, performedBy: 'ktvxn', performedAt: '08:40:00', note: 'Cần bổ sung sắt theo chỉ định bác sĩ' },
+  { id: 'res2', orderId: 'cls3', visitId: 'v6', result: 'X-Quang cột sống thắt lưng thẳng nghiêng: Hẹp khe liên đốt L4-L5, L5-S1. Mỏ xương nhỏ ở bờ trước thân đốt sống. Kết luận: Thoái hóa cột sống thắt lưng độ II', isAbnormal: true, performedBy: 'u7', performedAt: '08:25:00' },
+  { id: 'res3', orderId: 'cls8', visitId: 'v17', result: 'Điện tim bình thường. Nhịp xoang đều, tần số 78 l/p. Trục điện tim bình thường. Không có ST chênh, không rối loạn nhịp', isAbnormal: false, performedBy: 'u7', performedAt: '08:35:00' },
+  { id: 'res4', orderId: 'cls9', visitId: 'v17', result: 'Công thức máu trong giới hạn bình thường. BC 7.2, HC 4.5, Hb 14.3, TC 220. Lưu ý: Cholesterol toàn phần 5.8 mmol/L (cao giới hạn)', isAbnormal: false, performedBy: 'u7', performedAt: '08:40:00' },
+  { id: 'res5', orderId: 'cls10', visitId: 'v21', result: 'Điện tim 12 chuyển đạo: Nhịp xoang đều, tần số 92 l/p. Trục lệch trái nhẹ. ST chênh lên nhẹ ở V1-V2. Biên độ R ở V5-V6 tăng cao. Kết luận: Nghi dày thất trái - cần theo dõi và kết luận lâm sàng.', isAbnormal: true, performedBy: 'u7', performedAt: '08:50:00', note: 'Khuyến nghị tham khảo chuyên khoa tim mạch nếu cần' },
+  { id: 'res6', orderId: 'cls11', visitId: 'v22', result: 'Huyết đồ trong giới hạn cho phép. BC 6.9 K/uL, HC 4.4 M/uL, Hb 13.6 g/dL, Hct 41.2%, TC 210 K/uL.', isAbnormal: false, performedBy: 'u7', performedAt: '08:35:00' },
+];
+
+// ===== APPOINTMENTS =====
+export const MOCK_APPOINTMENTS: Appointment[] = [
+  { id: 'apt1', patientId: 'p5', patientName: 'Hoàng Minh Đức', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+  { id: 'apt2', patientId: 'p13', patientName: 'Đỗ Minh Phúc', doctorId: 'd4', roomId: 'r4', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+  { id: 'apt3', patientId: 'p16', patientName: 'Lưu Thị Thảo', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '07:00', status: 'CHECKED_IN' },
+  { id: 'apt4', patientId: 'p9', patientName: 'Bùi Quốc Long', doctorId: 'd5', roomId: 'r5', serviceId: 's4', scheduledDate: '2026-05-31', scheduledTime: '07:30', status: 'CHECKED_IN' },
+  { id: 'apt5', patientId: 'p11', patientName: 'Trương Văn Nam', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '09:00', status: 'SCHEDULED' },
+  { id: 'apt6', patientId: 'p17', patientName: 'Mai Văn Tuấn', doctorId: 'd2', roomId: 'r2', serviceId: 's2', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+];
+
+// ===== STATUS HISTORY =====
+export const MOCK_STATUS_HISTORY: StatusHistoryEntry[] = [
+  { id: 'sh1', visitId: 'v1', toStatus: 'WAITING_EXAM', timestamp: '07:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh2', visitId: 'v1', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:30:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+  { id: 'sh3', visitId: 'v2', toStatus: 'WAITING_EXAM', timestamp: '07:30:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh4', visitId: 'v2', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:00:00', performedBy: 'u7', performedByName: 'BS. Hồ Thị Nga' },
+  { id: 'sh5', visitId: 'v2', fromStatus: 'IN_EXAM', toStatus: 'WAITING_CLS', timestamp: '08:10:00', performedBy: 'u7', performedByName: 'BS. Hồ Thị Nga' },
+  { id: 'sh6', visitId: 'v16', toStatus: 'WAITING_EXAM', timestamp: '07:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh7', visitId: 'v16', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '07:15:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+  { id: 'sh8', visitId: 'v16', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '07:55:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+  { id: 'sh9', visitId: 'v16', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '08:15:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh10', visitId: 'v9', toStatus: 'WAITING_EXAM', timestamp: '07:50:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh11', visitId: 'v9', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:10:00', performedBy: 'u5', performedByName: 'BS. Vũ Thị Lan' },
+  { id: 'sh12', visitId: 'v9', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '08:45:00', performedBy: 'u5', performedByName: 'BS. Vũ Thị Lan' },
+  { id: 'sh13', visitId: 'v22', toStatus: 'WAITING_EXAM', timestamp: '08:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh14', visitId: 'v22', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:15:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+  { id: 'sh15', visitId: 'v22', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '08:40:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+  { id: 'sh16', visitId: 'v22', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '09:05:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh17', visitId: 'v23', toStatus: 'WAITING_EXAM', timestamp: '08:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+  { id: 'sh18', visitId: 'v23', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '09:00:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+];
+
+// ===== DISPATCH HISTORY =====
+export const MOCK_DISPATCH_HISTORY: DispatchHistoryEntry[] = [
+  { id: 'dh1', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', fromRoomId: 'r7', toRoomId: 'r11', toRoomName: 'Phòng Siêu Âm', followedSuggestion: true, reason: 'Chỉ định siêu âm thai', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '08:10:00' },
+  { id: 'dh2', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', fromRoomId: 'r8', toRoomId: 'r12', toRoomName: 'Phòng X-Quang', followedSuggestion: true, reason: 'Chỉ định X-Quang cột sống', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '07:55:00' },
+  { id: 'dh3', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', fromRoomId: 'r1', toRoomId: 'r9', toRoomName: 'Phòng Xét Nghiệm', followedSuggestion: false, reason: 'Chỉ định XN máu, chuyển tay vì BN muốn XN nhanh', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '08:20:00' },
+  { id: 'dh4', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', fromRoomId: undefined, toRoomId: 'r5', toRoomName: 'Phòng Khám 201', followedSuggestion: true, reason: 'BN đặt lịch khám TMH', dispatchedBy: 'u2', dispatchedByName: 'Trần Thị Lễ Tân', dispatchedAt: '07:50:00' },
+];
+
+// ===== INVOICES =====
+export const MOCK_INVOICES: Invoice[] = [
+  { id: 'inv1', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', items: [{ serviceId: 's4', serviceName: 'Khám Tai Mũi Họng', quantity: 1, unitPrice: 150000, totalPrice: 150000 }, { serviceId: 's8', serviceName: 'Xét Nghiệm Máu', quantity: 1, unitPrice: 180000, totalPrice: 180000 }], totalAmount: 330000, paidAmount: 0, status: 'PENDING', createdAt: '08:45:00' },
+  { id: 'inv2', visitId: 'v16', patientId: 'p16', patientName: 'Lưu Thị Thảo', items: [{ serviceId: 's1', serviceName: 'Khám Nội Tổng Quát', quantity: 1, unitPrice: 150000, totalPrice: 150000 }, { serviceId: 's14', serviceName: 'X-Quang Ngực', quantity: 1, unitPrice: 150000, totalPrice: 150000 }], totalAmount: 300000, paidAmount: 300000, status: 'PAID', createdAt: '07:55:00', paidAt: '08:15:00' },
+];
+
+// ===== ROOM SNAPSHOTS (hourly) =====
+export const MOCK_ROOM_SNAPSHOTS: RoomSnapshot[] = [
+  { id: 'rs1', roomId: 'r1', roomName: 'Phòng Khám 101', timestamp: '07:00', waitingCount: 2, servingCount: 1, loadLevel: 'NORMAL', avgWaitMinutes: 12 },
+  { id: 'rs2', roomId: 'r1', roomName: 'Phòng Khám 101', timestamp: '08:00', waitingCount: 6, servingCount: 1, loadLevel: 'WARNING', avgWaitMinutes: 38 },
+  { id: 'rs3', roomId: 'r1', roomName: 'Phòng Khám 101', timestamp: '09:00', waitingCount: 8, servingCount: 1, loadLevel: 'WARNING', avgWaitMinutes: 45 },
+  { id: 'rs4', roomId: 'r3', roomName: 'Phòng Khám 103', timestamp: '07:00', waitingCount: 3, servingCount: 1, loadLevel: 'NORMAL', avgWaitMinutes: 18 },
+  { id: 'rs5', roomId: 'r3', roomName: 'Phòng Khám 103', timestamp: '08:00', waitingCount: 8, servingCount: 1, loadLevel: 'WARNING', avgWaitMinutes: 52 },
+  { id: 'rs6', roomId: 'r3', roomName: 'Phòng Khám 103', timestamp: '09:00', waitingCount: 12, servingCount: 1, loadLevel: 'OVERLOAD', avgWaitMinutes: 68 },
+  { id: 'rs7', roomId: 'r11', roomName: 'Phòng Siêu Âm', timestamp: '07:00', waitingCount: 2, servingCount: 1, loadLevel: 'NORMAL', avgWaitMinutes: 25 },
+  { id: 'rs8', roomId: 'r11', roomName: 'Phòng Siêu Âm', timestamp: '08:00', waitingCount: 5, servingCount: 1, loadLevel: 'WARNING', avgWaitMinutes: 55 },
+  { id: 'rs9', roomId: 'r11', roomName: 'Phòng Siêu Âm', timestamp: '09:00', waitingCount: 7, servingCount: 1, loadLevel: 'OVERLOAD', avgWaitMinutes: 80 },
+];
+
+// ===== DASHBOARD STATS =====
+export const MOCK_DASHBOARD_STATS: DashboardStats = {
+  totalPatientsToday: 47,
+  waitingExam: 8,
+  waitingCLS: 5,
+  waitingConclusion: 2,
+  avgWaitMinutes: 34,
+  overloadedRooms: 4,
+  roomUtilizationRate: 68,
+  dispatchCount: 18,
+  completedToday: 12,
+  cancelledToday: 1,
+};
+
+// ===== CHART DATA =====
+export const PATIENT_FLOW_CHART_DATA = [
+  { time: '07:00', check_in: 8, completed: 2, waiting: 6 },
+  { time: '07:30', check_in: 12, completed: 5, waiting: 9 },
+  { time: '08:00', check_in: 18, completed: 8, waiting: 12 },
+  { time: '08:30', check_in: 28, completed: 11, waiting: 16 },
+  { time: '09:00', check_in: 35, completed: 13, waiting: 20 },
+  { time: '09:30', check_in: 42, completed: 18, waiting: 22 },
+  { time: '10:00', check_in: 47, completed: 22, waiting: 19 },
+];
+
+export const WAIT_TIME_CHART_DATA = [
+  { date: '27/05', avg_wait: 28, avg_service: 16 },
+  { date: '28/05', avg_wait: 32, avg_service: 15 },
+  { date: '29/05', avg_wait: 25, avg_service: 14 },
+  { date: '30/05', avg_wait: 38, avg_service: 17 },
+  { date: '31/05', avg_wait: 34, avg_service: 15 },
+];
+
+export const DEPARTMENT_STATS = [
+  { dept: 'Nội TQ', patients: 18, avgWait: 42 },
+  { dept: 'Tim Mạch', patients: 8, avgWait: 20 },
+  { dept: 'Nhi Khoa', patients: 14, avgWait: 65 },
+  { dept: 'SPK', patients: 10, avgWait: 58 },
+  { dept: 'CLS', patients: 32, avgWait: 35 },
+  { dept: 'TMH', patients: 6, avgWait: 15 },
+  { dept: 'Da Liễu', patients: 4, avgWait: 12 },
+  { dept: 'Xương Khớp', patients: 7, avgWait: 24 },
+];
+
+// ===== ACTION LOGS =====
+export const MOCK_ACTION_LOGS: ActionLog[] = [
+  { id: 'al1', actionType: 'CALL_PATIENT', visitId: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', fromStatus: 'WAITING_EXAM', createdAt: '08:02:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+  { id: 'al2', actionType: 'TRANSFER_ROOM', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', fromRoomId: 'r7', toRoomId: 'r11', reason: 'Chỉ định siêu âm thai', createdAt: '08:10:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+  { id: 'al3', actionType: 'ACCEPT_REALLOCATION', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', fromRoomId: 'r11', toRoomId: 'r11', reason: 'Gợi ý hệ thống - giảm tải phòng siêu âm', createdAt: '08:52:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+  { id: 'al4', actionType: 'CALL_PATIENT', visitId: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', fromStatus: 'WAITING_EXAM', createdAt: '08:42:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+  { id: 'al5', actionType: 'DISMISS_REALLOCATION', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', reason: 'Bệnh nhân không đồng ý chuyển phòng', createdAt: '08:35:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+];
+
+
+
+==================== src\types\index.ts ====================
+// ===== USER & AUTH =====
+export type UserRole = 'ADMIN' | 'RECEPTIONIST' | 'COORDINATOR' | 'DOCTOR' | 'LAB_STAFF' | 'MANAGER';
+
+export interface User {
+  id: string;
+  name: string;
+  username: string;
+  role: UserRole;
+  department?: string;
+  roomId?: string;
+  avatar?: string;
+}
+
+// ===== PATIENT =====
+export type PriorityReason =
+  | 'CHILD_UNDER_6'
+  | 'PREGNANT'
+  | 'DISABLED'
+  | 'ELDERLY_75PLUS'
+  | 'VETERAN'
+  | 'EMERGENCY';
+
+export interface Patient {
+  id: string;
+  patientCode: string;
+  name: string;
+  dateOfBirth: string;
+  age: number;
+  gender: 'MALE' | 'FEMALE';
+  idNumber: string;
+  phone: string;
+  address: string;
+  insurance?: string;
+  email?: string;
+  emergencyContact?: string;
+  medicalHistory?: string;
+  priorityReason?: PriorityReason;
+}
+
+// ===== VISIT & STATUS =====
+export type PatientStatus =
+  | 'WAITING_EXAM'
+  | 'IN_EXAM'
+  | 'WAITING_CLS'
+  | 'IN_CLS'
+  | 'WAITING_RESULT'
+  | 'WAITING_CONCLUSION'
+  | 'IN_CONCLUSION'
+  | 'WAITING_PAYMENT'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type QueueLane = 'APPOINTMENT' | 'PRIORITY' | 'NORMAL' | 'AFTER_CLS';
+
+export interface Visit {
+  id: string;
+  patientId: string;
+  patientName: string;
+  ticketNumber: string;
+  visitDate: string;
+  status: PatientStatus;
+  lane: QueueLane;
+  priorityReason?: PriorityReason;
+  priorityScore: number;
+  chiefComplaint?: string;
+  provisionalDiagnosis?: string;
+  finalDiagnosis?: string;
+  conclusion?: string;
+  doctorId?: string;
+  roomId?: string;
+  clsOrders?: string[];
+  totalAmount?: number;
+  checkInTime: string;
+  completionTime?: string;
+  appointmentId?: string;
+  notes?: string;
+  treatmentDirection?: string;
+  treatmentPlan?: string;
+}
+
+// ===== QUEUE =====
+export interface QueueItem {
+  id: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: 'MALE' | 'FEMALE';
+  ticketNumber: string;
+  lane: QueueLane;
+  priorityScore: number;
+  priorityReason?: PriorityReason;
+  status: PatientStatus;
+  targetRoomId: string;
+  targetDoctorId?: string;
+  queuedAt: string;
+  estimatedWaitMinutes: number;
+  calledAt?: string;
+  servedAt?: string;
+  noShowCount?: number;
+  mustReturnToDoctor?: boolean;
+  chiefComplaint?: string;
+}
+
+// ===== ACTION LOG =====
+export type ActionType =
+  | 'CALL_PATIENT'
+  | 'START_SERVICE'
+  | 'NO_SHOW'
+  | 'TRANSFER_ROOM'
+  | 'ACCEPT_REALLOCATION'
+  | 'DISMISS_REALLOCATION'
+  | 'CANCEL_VISIT';
+
+export interface ActionLog {
+  id: string;
+  actionType: ActionType;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  fromStatus?: PatientStatus;
+  toStatus?: PatientStatus;
+  fromRoomId?: string;
+  toRoomId?: string;
+  reason?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+}
+
+// ===== ROOM =====
+export type RoomType = 'EXAM' | 'LAB' | 'IMAGING';
+export type RoomLoadLevel = 'NORMAL' | 'WARNING' | 'OVERLOAD';
+
+export interface Room {
+  id: string;
+  name: string;
+  type: RoomType;
+  department: string;
+  floor: string;
+  doctorId?: string;
+  capacity: number;
+  currentWaiting: number;
+  currentServing: number;
+  avgServiceMinutes: number;
+  avgWaitMinutes: number;
+  loadLevel: RoomLoadLevel;
+  status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+  utilizationRate: number;
+  suggestionScore?: number;
+}
+
+// ===== DOCTOR =====
+export interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  department: string;
+  roomId: string;
+  status: 'AVAILABLE' | 'BUSY' | 'BREAK' | 'OFFLINE';
+  qualifications: string;
+}
+
+// ===== SERVICE =====
+export interface Service {
+  id: string;
+  name: string;
+  code: string;
+  type: 'EXAM' | 'LAB' | 'IMAGING' | 'PROCEDURE';
+  department: string;
+  price: number;
+  durationMinutes: number;
+  roomIds: string[];
+}
+
+// ===== CLS ORDERS =====
+export type CLSPriority = 'URGENT' | 'ROUTINE';
+export type CLSStatus = 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface CLSOrder {
+  id: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  serviceId: string;
+  serviceName: string;
+  roomId: string;
+  priority: CLSPriority;
+  status: CLSStatus;
+  orderedBy: string;
+  orderedAt: string;
+  clinicalNote?: string;
+  completedAt?: string;
+  resultId?: string;
+}
+
+export interface CLSResult {
+  id: string;
+  orderId: string;
+  visitId: string;
+  result: string;
+  isAbnormal: boolean;
+  performedBy: string;
+  performedAt: string;
+  note?: string;
+  attachments?: string[];
+}
+
+// ===== INVOICE =====
+export interface InvoiceItem {
+  serviceId: string;
+  serviceName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface Invoice {
+  id: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  items: InvoiceItem[];
+  totalAmount: number;
+  paidAmount: number;
+  status: 'PENDING' | 'PARTIAL' | 'PAID';
+  createdAt: string;
+  paidAt?: string;
+}
+
+// ===== APPOINTMENT =====
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  doctorId: string;
+  roomId: string;
+  serviceId: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  status: 'SCHEDULED' | 'CHECKED_IN' | 'LATE' | 'NO_SHOW' | 'CANCELLED';
+  note?: string;
+}
+
+// ===== HISTORY =====
+export interface StatusHistoryEntry {
+  id: string;
+  visitId: string;
+  fromStatus?: PatientStatus;
+  toStatus: PatientStatus;
+  timestamp: string;
+  performedBy: string;
+  performedByName: string;
+  note?: string;
+}
+
+export interface DispatchHistoryEntry {
+  id: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  fromRoomId?: string;
+  toRoomId: string;
+  toRoomName: string;
+  followedSuggestion: boolean;
+  reason: string;
+  dispatchedBy: string;
+  dispatchedByName: string;
+  dispatchedAt: string;
+}
+
+export interface RoomSnapshot {
+  id: string;
+  roomId: string;
+  roomName: string;
+  timestamp: string;
+  waitingCount: number;
+  servingCount: number;
+  loadLevel: RoomLoadLevel;
+  avgWaitMinutes: number;
+}
+
+// ===== DASHBOARD =====
+export interface DashboardStats {
+  totalPatientsToday: number;
+  waitingExam: number;
+  waitingCLS: number;
+  waitingConclusion: number;
+  avgWaitMinutes: number;
+  overloadedRooms: number;
+  roomUtilizationRate: number;
+  dispatchCount: number;
+  completedToday: number;
+  cancelledToday: number;
+}
+
+// ===== REPORT FILTER =====
+export interface ReportFilter {
+  dateFrom: string;
+  dateTo: string;
+  department?: string;
+  roomId?: string;
+  doctorId?: string;
+  serviceType?: string;
+}
+
+
+
+==================== src\components\layout\Layout.tsx ====================
+import { useState } from 'react';
+import Sidebar from './Sidebar';
+import Header from './Header';
+
+interface LayoutProps {
+  children: React.ReactNode;
+  pageTitle?: string;
+}
+
+export default function Layout({ children, pageTitle }: LayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header onMenuClick={() => setSidebarOpen(true)} pageTitle={pageTitle} />
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 md:p-6">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+
+==================== src\components\layout\Sidebar.tsx ====================
+import { NavLink, useLocation } from 'react-router-dom';
+import {
+  Activity,
+  ArrowRightLeft,
+  BarChart3,
+  CalendarDays,
+  ClipboardList,
+  FlaskConical,
+  LayoutDashboard,
+  ListOrdered,
+  Bell,
+  Settings,
+  Stethoscope,
+  UserCircle,
+  Users,
+  X,
+} from 'lucide-react';
+import { LogoPamec } from '../../assets/logo_pamec';
+import { clsx } from 'clsx';
+import { useAuth } from '../../context/AuthContext';
+import type { UserRole } from '../../types';
+
+interface NavItem {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  roles: UserRole[];
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Tổng quan', path: '/dashboard', icon: <LayoutDashboard size={18} />, roles: ['ADMIN', 'MANAGER', 'COORDINATOR', 'RECEPTIONIST', 'LAB_STAFF'] },
+  { label: 'Tiếp nhận', path: '/reception', icon: <ClipboardList size={18} />, roles: ['ADMIN', 'RECEPTIONIST', 'COORDINATOR'] },
+  { label: 'Hàng đợi', path: '/queue', icon: <ListOrdered size={18} />, roles: ['ADMIN', 'COORDINATOR', 'RECEPTIONIST'] },
+  { label: 'Điều phối', path: '/dispatch', icon: <ArrowRightLeft size={18} />, roles: ['ADMIN', 'COORDINATOR'] },
+  { label: 'Phòng Khám', path: '/doctor', icon: <Stethoscope size={18} />, roles: ['ADMIN'] },
+  { label: 'Cận Lâm Sàng', path: '/lab', icon: <FlaskConical size={18} />, roles: ['ADMIN', 'LAB_STAFF'] },
+  { label: 'Theo Dõi Lượt Khám', path: '/visit-tracking', icon: <Activity size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
+  { label: 'Giám Sát Tải', path: '/monitoring', icon: <Users size={18} />, roles: ['ADMIN', 'COORDINATOR', 'MANAGER'] },
+  { label: 'Báo Cáo', path: '/reports', icon: <BarChart3 size={18} />, roles: ['ADMIN', 'MANAGER'] },
+  { label: 'Cài Đặt', path: '/settings', icon: <Settings size={18} />, roles: ['ADMIN'] },
+];
+
+const DOCTOR_NAV_ITEMS: NavItem[] = [
+  { label: 'Tổng quan', path: '/doctor', icon: <LayoutDashboard size={18} />, roles: ['DOCTOR'] },
+  { label: 'Hàng đợi khám', path: '/doctor?view=queue', icon: <ListOrdered size={18} />, roles: ['DOCTOR'] },
+  { label: 'Danh sách bệnh nhân', path: '/doctor?view=patients', icon: <Users size={18} />, roles: ['DOCTOR'] },
+  { label: 'Kết quả cận lâm sàng', path: '/doctor?view=results', icon: <FlaskConical size={18} />, roles: ['DOCTOR'] },
+  { label: 'Lịch làm việc', path: '/doctor?view=schedule', icon: <CalendarDays size={18} />, roles: ['DOCTOR'] },
+  { label: 'Báo cáo cá nhân', path: '/doctor?view=reports', icon: <BarChart3 size={18} />, roles: ['DOCTOR'] },
+  { label: 'Tài khoản', path: '/doctor?view=account', icon: <UserCircle size={18} />, roles: ['DOCTOR'] },
+];
+
+const RECEPTIONIST_NAV_ITEMS: NavItem[] = [
+  { label: 'Tổng quan', path: '/reception?view=overview', icon: <LayoutDashboard size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Tiếp nhận bệnh nhân', path: '/reception', icon: <ClipboardList size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Đăng ký khám / Đặt lịch', path: '/reception?view=appointments', icon: <CalendarDays size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Hàng đợi khám', path: '/queue', icon: <ListOrdered size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Danh sách bệnh nhân', path: '/reception?view=patients', icon: <Users size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Lịch làm việc bác sĩ', path: '/reception?view=doctors', icon: <Stethoscope size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Điều phối bệnh nhân', path: '/dispatch', icon: <ArrowRightLeft size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Thông báo', path: '/reception?view=notifications', icon: <Bell size={18} />, roles: ['RECEPTIONIST'] },
+  { label: 'Tài khoản', path: '/reception?view=account', icon: <UserCircle size={18} />, roles: ['RECEPTIONIST'] },
+];
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: 'Quản Trị',
+  RECEPTIONIST: 'Lễ Tân',
+  COORDINATOR: 'Điều Phối',
+  DOCTOR: 'Bác Sĩ',
+  LAB_STAFF: 'Nhân Viên CLS',
+  MANAGER: 'Quản Lý',
+};
+
+interface SidebarProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ open, onClose }: SidebarProps) {
+  const { user } = useAuth();
+  const location = useLocation();
+  const sourceItems = user?.role === 'DOCTOR'
+    ? DOCTOR_NAV_ITEMS
+    : user?.role === 'RECEPTIONIST'
+      ? RECEPTIONIST_NAV_ITEMS
+      : NAV_ITEMS;
+  const visibleItems = sourceItems.filter(item => user ? item.roles.includes(user.role) : false);
+
+  return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-20 bg-black/40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={clsx(
+          'fixed top-0 left-0 z-30 h-full w-64 bg-slate-900 flex flex-col transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto',
+          open ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 flex items-center justify-center">
+              <LogoPamec width="32px" height="32px" />
+            </div>
+            <div>
+              <span className="text-white font-bold text-lg leading-none">PAMEC</span>
+              <p className="text-slate-400 text-xs">Điều Phối Bệnh Nhân</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+
+        {user && (
+          <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-sky-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                {user.name.split(' ').pop()?.charAt(0)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-white text-sm font-medium truncate">{user.name}</p>
+                <p className="text-sky-400 text-xs">{ROLE_LABELS[user.role]}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+          {visibleItems.map(item => (
+            <NavLink
+              key={`${item.label}-${item.path}`}
+              to={item.path}
+              onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+              className={({ isActive }) => {
+                const currentPath = `${location.pathname}${location.search}`;
+                const active = user?.role === 'DOCTOR'
+                  ? currentPath === item.path
+                  : user?.role === 'RECEPTIONIST'
+                    ? currentPath === item.path || (item.label === 'Tiếp nhận bệnh nhân' && location.pathname === '/reception' && !location.hash)
+                  : isActive || location.pathname === item.path;
+                return clsx(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                  active
+                    ? 'bg-sky-100 text-sky-800 shadow-sm'
+                    : 'text-slate-300 hover:bg-slate-700/70 hover:text-white'
+                );
+              }}
+            >
+              {item.icon}
+              <span className="truncate">{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="px-4 py-3 border-t border-slate-700">
+          <p className="text-slate-500 text-xs text-center">MediFlow v1.0 • {new Date().toLocaleDateString('vi-VN')}</p>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+
+
+==================== src\components\layout\Header.tsx ====================
+import { Menu, Bell, LogOut, Clock, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import type { UserRole } from '../../types';
+import { useState } from 'react';
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: 'Quản Trị Viên',
+  RECEPTIONIST: 'Lễ Tân',
+  COORDINATOR: 'Điều Phối / Điều Dưỡng',
+  DOCTOR: 'Bác Sĩ',
+  LAB_STAFF: 'Nhân Viên Cận Lâm Sàng',
+  MANAGER: 'Quản Lý',
+};
+
+const ROLE_COLORS: Record<UserRole, string> = {
+  ADMIN: 'bg-purple-100 text-purple-700',
+  RECEPTIONIST: 'bg-blue-100 text-blue-700',
+  COORDINATOR: 'bg-teal-100 text-teal-700',
+  DOCTOR: 'bg-green-100 text-green-700',
+  LAB_STAFF: 'bg-orange-100 text-orange-700',
+  MANAGER: 'bg-rose-100 text-rose-700',
+};
+
+interface HeaderProps {
+  onMenuClick: () => void;
+  pageTitle?: string;
+}
+
+export default function Header({ onMenuClick, pageTitle }: HeaderProps) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const now = new Date();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  return (
+    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-10 shadow-sm">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+        >
+          <Menu size={20} />
+        </button>
+        {pageTitle && (
+          <h1 className="text-base font-semibold text-gray-800 hidden sm:block">{pageTitle}</h1>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4">
+        {/* Date/Time */}
+        <div className="hidden md:flex items-center gap-1.5 text-sm text-gray-500">
+          <Clock size={14} />
+          <span>
+            {now.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </span>
+        </div>
+
+        {/* Notification bell */}
+        <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+          <Bell size={18} />
+          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+        </button>
+
+        {/* User menu */}
+        {user && (
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-sky-600 flex items-center justify-center text-white font-semibold text-sm">
+                {user.name.split(' ').pop()?.charAt(0)}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-sm font-medium text-gray-800 leading-none">{user.name.split(' ').slice(-2).join(' ')}</p>
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[user.role]}`}>
+                  {ROLE_LABELS[user.role]}
+                </span>
+              </div>
+              <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
+            </button>
+
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-200 z-20 py-1">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="font-medium text-sm text-gray-900">{user.name}</p>
+                    <p className="text-xs text-gray-500">{user.department}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={15} />
+                    Đăng Xuất
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+
+
+==================== src\components\ui\StatusBadge.tsx ====================
+import { clsx } from 'clsx';
+import type { PatientStatus } from '../../types';
+
+const STATUS_CONFIG: Record<PatientStatus, { label: string; className: string }> = {
+  WAITING_EXAM:       { label: 'Chờ Khám',       className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  IN_EXAM:            { label: 'Đang Khám',       className: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  WAITING_CLS:        { label: 'Chờ CLS',         className: 'bg-purple-100 text-purple-700 border-purple-200' },
+  IN_CLS:             { label: 'Đang CLS',         className: 'bg-violet-100 text-violet-700 border-violet-200' },
+  WAITING_RESULT:     { label: 'Chờ Kết Quả',    className: 'bg-orange-100 text-orange-700 border-orange-200' },
+  WAITING_CONCLUSION: { label: 'Chờ Kết Luận',   className: 'bg-amber-100 text-amber-700 border-amber-200' },
+  IN_CONCLUSION:      { label: 'Đang Kết Luận',  className: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  WAITING_PAYMENT:    { label: 'Chờ Thanh Toán', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  COMPLETED:          { label: 'Hoàn Tất',        className: 'bg-green-100 text-green-700 border-green-200' },
+  CANCELLED:          { label: 'Đã Hủy',          className: 'bg-gray-100 text-gray-500 border-gray-200' },
+};
+
+interface StatusBadgeProps {
+  status: PatientStatus;
+  size?: 'sm' | 'md';
+  dot?: boolean;
+}
+
+export default function StatusBadge({ status, size = 'md', dot = true }: StatusBadgeProps) {
+  const config = STATUS_CONFIG[status];
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1.5 border rounded-full font-medium whitespace-nowrap',
+      size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs',
+      config.className
+    )}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70 flex-shrink-0" />}
+      {config.label}
+    </span>
+  );
+}
+
+export { STATUS_CONFIG };
+
+
+
+==================== src\components\ui\PriorityBadge.tsx ====================
+import { clsx } from 'clsx';
+import { Baby, HeartPulse, Accessibility, Clock, Award, Siren } from 'lucide-react';
+import type { PriorityReason, QueueLane, RoomLoadLevel } from '../../types';
+
+const PRIORITY_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+  CHILD_UNDER_6:  { label: 'Trẻ em < 6 tuổi',   className: 'bg-pink-100 text-pink-700 border-pink-200',   icon: <Baby size={11} /> },
+  PREGNANT:       { label: 'Phụ nữ có thai',      className: 'bg-rose-100 text-rose-700 border-rose-200',   icon: <HeartPulse size={11} /> },
+  DISABLED:       { label: 'Người khuyết tật',    className: 'bg-blue-100 text-blue-700 border-blue-200',   icon: <Accessibility size={11} /> },
+  ELDERLY_75PLUS: { label: 'Người ≥ 75 tuổi',     className: 'bg-amber-100 text-amber-700 border-amber-200', icon: <Clock size={11} /> },
+  VETERAN:        { label: 'Người có công',        className: 'bg-red-100 text-red-700 border-red-200',       icon: <Award size={11} /> },
+  EMERGENCY:      { label: 'Cấp cứu',              className: 'bg-red-600 text-white border-red-600 animate-pulse', icon: <Siren size={11} /> },
+};
+
+const LANE_CONFIG: Record<QueueLane, { label: string; className: string }> = {
+  APPOINTMENT: { label: 'Đặt Lịch',  className: 'bg-sky-100 text-sky-700 border-sky-200' },
+  PRIORITY:    { label: 'Ưu Tiên',   className: 'bg-red-100 text-red-700 border-red-200' },
+  NORMAL:      { label: 'Thường',    className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  AFTER_CLS:   { label: 'Sau CLS',   className: 'bg-purple-100 text-purple-700 border-purple-200' },
+};
+
+const LOAD_CONFIG: Record<RoomLoadLevel, { label: string; className: string; dot: string }> = {
+  NORMAL:   { label: 'Bình Thường', className: 'bg-green-100 text-green-700 border-green-200',  dot: 'bg-green-500' },
+  WARNING:  { label: 'Cảnh Báo',   className: 'bg-amber-100 text-amber-700 border-amber-200',   dot: 'bg-amber-500' },
+  OVERLOAD: { label: 'Quá Tải',    className: 'bg-red-100 text-red-700 border-red-200',          dot: 'bg-red-500 animate-pulse' },
+};
+
+interface PriorityBadgeProps {
+  reason: PriorityReason;
+  size?: 'sm' | 'md';
+}
+
+export function PriorityBadge({ reason, size = 'md' }: PriorityBadgeProps) {
+  if (!reason) return null;
+  const config = PRIORITY_CONFIG[reason];
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1 border rounded-full font-medium whitespace-nowrap',
+      size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-0.5 text-xs',
+      config.className
+    )}>
+      {config.icon}
+      {config.label}
+    </span>
+  );
+}
+
+interface LaneBadgeProps {
+  lane: QueueLane;
+  size?: 'sm' | 'md';
+}
+
+export function LaneBadge({ lane, size = 'md' }: LaneBadgeProps) {
+  const config = LANE_CONFIG[lane];
+  return (
+    <span className={clsx(
+      'inline-flex items-center border rounded-full font-medium whitespace-nowrap',
+      size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-0.5 text-xs',
+      config.className
+    )}>
+      {config.label}
+    </span>
+  );
+}
+
+interface LoadBadgeProps {
+  level: RoomLoadLevel;
+}
+
+export function LoadBadge({ level }: LoadBadgeProps) {
+  const config = LOAD_CONFIG[level];
+  return (
+    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-full font-semibold', config.className)}>
+      <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', config.dot)} />
+      {config.label}
+    </span>
+  );
+}
+
+export { PRIORITY_CONFIG, LANE_CONFIG, LOAD_CONFIG };
+
+
+
+==================== src\components\patient\PatientForm.tsx ====================
+import { useState } from 'react';
+import { Search, UserPlus, Check, AlertCircle } from 'lucide-react';
+import { clsx } from 'clsx';
+import type { Patient, PriorityReason, QueueLane, Visit } from '../../types';
+import { useHospital } from '../../context/HospitalContext';
+import { useAuth } from '../../context/AuthContext';
+import { PriorityBadge } from '../ui/PriorityBadge';
+
+const PRIORITY_OPTIONS: { value: PriorityReason; label: string }[] = [
+  { value: 'CHILD_UNDER_6', label: 'Trẻ em dưới 6 tuổi' },
+  { value: 'PREGNANT', label: 'Phụ nữ có thai' },
+  { value: 'DISABLED', label: 'Người khuyết tật nặng' },
+  { value: 'ELDERLY_75PLUS', label: 'Người từ 75 tuổi trở lên' },
+  { value: 'VETERAN', label: 'Người có công' },
+  { value: 'EMERGENCY', label: 'Cấp cứu' },
+];
+
+const PRIORITY_SCORES: Record<string, number> = {
+  EMERGENCY: 100, CHILD_UNDER_6: 95, PREGNANT: 90, DISABLED: 87, ELDERLY_75PLUS: 85, VETERAN: 88,
+};
+
+interface PatientFormProps {
+  onSuccess?: (visit: Visit) => void;
+}
+
+export default function PatientForm({ onSuccess }: PatientFormProps) {
+  const { patients, rooms, doctors, services, addPatient, createVisit } = useHospital();
+  const { user } = useAuth();
+
+  const [step, setStep] = useState<'search' | 'patient' | 'visit'>('search');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [isNew, setIsNew] = useState(false);
+  const [success, setSuccess] = useState<Visit | null>(null);
+  const [error, setError] = useState('');
+
+  // Patient form
+  const [patientForm, setPatientForm] = useState({
+    name: '', dateOfBirth: '', gender: 'MALE' as 'MALE' | 'FEMALE',
+    idNumber: '', phone: '', address: '', insurance: '', email: '',
+    age: 0,
+  });
+
+  // Visit form
+  const [visitForm, setVisitForm] = useState({
+    serviceId: '',
+    departmentId: '',
+    roomId: '',
+    doctorId: '',
+    priorityReason: '' as PriorityReason | '',
+    chiefComplaint: '',
+    appointmentId: '',
+    isAppointment: false,
+  });
+
+  const searchResults = searchQuery.length >= 2
+    ? patients.filter(p =>
+        p.patientCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.phone.includes(searchQuery) ||
+        p.idNumber.includes(searchQuery)
+      ).slice(0, 8)
+    : [];
+
+  const examRooms = rooms.filter(r => r.type === 'EXAM' && r.status === 'ACTIVE');
+  const examDoctors = visitForm.roomId
+    ? doctors.filter(d => d.roomId === visitForm.roomId)
+    : doctors;
+  const examServices = services.filter(s => s.type === 'EXAM');
+
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setStep('visit');
+    setIsNew(false);
+  };
+
+  const handleNewPatient = () => {
+    setIsNew(true);
+    setStep('patient');
+    setSelectedPatient(null);
+  };
+
+  const handleSavePatient = () => {
+    if (!patientForm.name || !patientForm.phone) {
+      setError('Vui lòng nhập đầy đủ họ tên và số điện thoại');
+      return;
+    }
+    const dob = new Date(patientForm.dateOfBirth);
+    const age = patientForm.dateOfBirth ? Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)) : 0;
+    const newPat = addPatient({ ...patientForm, age, priorityReason: undefined });
+    setSelectedPatient(newPat);
+    setStep('visit');
+    setError('');
+  };
+
+  const handleCreateVisit = () => {
+    if (!selectedPatient) return;
+    if (!visitForm.roomId) { setError('Vui lòng chọn phòng khám'); return; }
+    if (!visitForm.chiefComplaint) { setError('Vui lòng nhập lý do khám'); return; }
+
+    const priority = visitForm.priorityReason ? PRIORITY_SCORES[visitForm.priorityReason] ?? 50 : 50;
+    const lane: QueueLane = visitForm.isAppointment ? 'APPOINTMENT' : visitForm.priorityReason ? 'PRIORITY' : 'NORMAL';
+
+    const visit = createVisit(selectedPatient.id, {
+      roomId: visitForm.roomId,
+      doctorId: visitForm.doctorId || undefined,
+      lane,
+      priorityReason: (visitForm.priorityReason as PriorityReason) || undefined,
+      priorityScore: priority,
+      chiefComplaint: visitForm.chiefComplaint,
+    });
+
+    setSuccess(visit);
+    onSuccess?.(visit);
+    setError('');
+  };
+
+  const handleReset = () => {
+    setStep('search');
+    setSearchQuery('');
+    setSelectedPatient(null);
+    setIsNew(false);
+    setSuccess(null);
+    setError('');
+    setPatientForm({ name: '', dateOfBirth: '', gender: 'MALE', idNumber: '', phone: '', address: '', insurance: '', email: '', age: 0 });
+    setVisitForm({ serviceId: '', departmentId: '', roomId: '', doctorId: '', priorityReason: '', chiefComplaint: '', appointmentId: '', isAppointment: false });
+  };
+
+  if (success) {
+    return (
+      <div className="bg-white rounded-xl border border-green-200 p-8 text-center space-y-4">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+          <Check size={32} className="text-green-600" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Tiếp nhận thành công!</h3>
+          <p className="text-sm text-gray-500 mt-1">Bệnh nhân đã được thêm vào hàng đợi</p>
+        </div>
+        <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 inline-block">
+          <p className="text-xs text-sky-600 font-medium">Số thứ tự</p>
+          <p className="text-4xl font-black text-sky-700 tracking-wider">{success.ticketNumber}</p>
+          <p className="text-sm text-sky-600 mt-1">{selectedPatient?.name}</p>
+        </div>
+        <button onClick={handleReset} className="px-6 py-2.5 bg-sky-600 text-white rounded-lg font-medium hover:bg-sky-700 transition-colors text-sm">
+          Tiếp nhận bệnh nhân mới
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <AlertCircle size={16} />
+          {error}
+        </div>
+      )}
+
+      {/* Step 1: Search */}
+      {step === 'search' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tìm kiếm bệnh nhân
+            </label>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Mã BN, CCCD/CMND, số điện thoại, tên..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Results */}
+          {searchResults.length > 0 && (
+            <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
+              {searchResults.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelectPatient(p)}
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sky-50 transition-colors text-left"
+                >
+                  <div className="w-9 h-9 bg-sky-100 rounded-full flex items-center justify-center text-sky-700 font-bold text-sm flex-shrink-0">
+                    {p.name.split(' ').pop()?.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-gray-900">{p.name}</span>
+                      {p.priorityReason && <PriorityBadge reason={p.priorityReason} size="sm" />}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {p.patientCode} · {p.age} tuổi · {p.gender === 'MALE' ? 'Nam' : 'Nữ'} · {p.phone}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {searchQuery.length >= 2 && searchResults.length === 0 && (
+            <div className="text-center py-4 text-sm text-gray-400">
+              Không tìm thấy bệnh nhân
+            </div>
+          )}
+
+          <button
+            onClick={handleNewPatient}
+            className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-600 hover:border-sky-400 hover:text-sky-600 transition-colors"
+          >
+            <UserPlus size={16} />
+            Tạo hồ sơ bệnh nhân mới
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: Patient form */}
+      {step === 'patient' && (
+        <div className="space-y-4">
+          <h3 className="font-semibold text-gray-800 text-sm">Thông tin bệnh nhân mới</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Họ và tên *</label>
+              <input type="text" value={patientForm.name} onChange={e => setPatientForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" placeholder="Nhập họ và tên" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Ngày sinh</label>
+              <input type="date" value={patientForm.dateOfBirth} onChange={e => setPatientForm(p => ({ ...p, dateOfBirth: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Giới tính</label>
+              <select value={patientForm.gender} onChange={e => setPatientForm(p => ({ ...p, gender: e.target.value as 'MALE' | 'FEMALE' }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300">
+                <option value="MALE">Nam</option>
+                <option value="FEMALE">Nữ</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Số điện thoại *</label>
+              <input type="tel" value={patientForm.phone} onChange={e => setPatientForm(p => ({ ...p, phone: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" placeholder="0901234567" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">CCCD / CMND</label>
+              <input type="text" value={patientForm.idNumber} onChange={e => setPatientForm(p => ({ ...p, idNumber: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" placeholder="012345678901" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Địa chỉ</label>
+              <input type="text" value={patientForm.address} onChange={e => setPatientForm(p => ({ ...p, address: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" placeholder="Địa chỉ cư trú" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Số thẻ BHYT</label>
+              <input type="text" value={patientForm.insurance} onChange={e => setPatientForm(p => ({ ...p, insurance: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" placeholder="DN1234567890" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setStep('search')} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+              Quay lại
+            </button>
+            <button onClick={handleSavePatient} className="flex-1 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700">
+              Tiếp theo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Visit setup */}
+      {step === 'visit' && selectedPatient && (
+        <div className="space-y-4">
+          {/* Patient info summary */}
+          <div className="flex items-center gap-3 p-3 bg-sky-50 rounded-xl border border-sky-100">
+            <div className="w-10 h-10 bg-sky-200 rounded-full flex items-center justify-center font-bold text-sky-700">
+              {selectedPatient.name.split(' ').pop()?.charAt(0)}
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-gray-900">{selectedPatient.name}</p>
+              <p className="text-xs text-gray-500">{selectedPatient.patientCode} · {selectedPatient.age} tuổi · {selectedPatient.gender === 'MALE' ? 'Nam' : 'Nữ'}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Lý do khám *</label>
+              <textarea value={visitForm.chiefComplaint} onChange={e => setVisitForm(v => ({ ...v, chiefComplaint: e.target.value }))}
+                rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                placeholder="Mô tả triệu chứng, lý do đến khám..." />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Phòng / Khoa khám *</label>
+              <select value={visitForm.roomId} onChange={e => setVisitForm(v => ({ ...v, roomId: e.target.value, doctorId: '' }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300">
+                <option value="">Chọn phòng khám</option>
+                {examRooms.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} — {r.department} ({r.currentWaiting} đang chờ)
+                  </option>
+                ))}
+              </select>
+            </div>
+            {visitForm.roomId && examDoctors.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Bác sĩ (tùy chọn)</label>
+                <select value={visitForm.doctorId} onChange={e => setVisitForm(v => ({ ...v, doctorId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300">
+                  <option value="">Không chỉ định</option>
+                  {examDoctors.map(d => (
+                    <option key={d.id} value={d.id}>{d.name} — {d.specialty}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-2">Đối tượng ưu tiên</label>
+              <div className="grid grid-cols-2 gap-2">
+                {PRIORITY_OPTIONS.map(opt => (
+                  <label key={opt.value} className={clsx(
+                    'flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors text-xs',
+                    visitForm.priorityReason === opt.value ? 'border-sky-400 bg-sky-50' : 'border-gray-200 hover:bg-gray-50'
+                  )}>
+                    <input
+                      type="radio"
+                      name="priority"
+                      value={opt.value}
+                      checked={visitForm.priorityReason === opt.value}
+                      onChange={e => setVisitForm(v => ({ ...v, priorityReason: e.target.value as PriorityReason }))}
+                      className="sr-only"
+                    />
+                    <div className={clsx('w-3 h-3 rounded-full border-2 flex-shrink-0', visitForm.priorityReason === opt.value ? 'border-sky-500 bg-sky-500' : 'border-gray-300')} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              {visitForm.priorityReason && (
+                <button onClick={() => setVisitForm(v => ({ ...v, priorityReason: '' }))}
+                  className="text-xs text-gray-400 hover:text-red-500 mt-1">Xóa ưu tiên</button>
+              )}
+            </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={visitForm.isAppointment} onChange={e => setVisitForm(v => ({ ...v, isAppointment: e.target.checked }))}
+                  className="w-4 h-4 rounded text-sky-600" />
+                <span className="text-xs font-medium text-gray-600">Bệnh nhân có lịch hẹn trước</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => setStep('search')} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+              Quay lại
+            </button>
+            <button onClick={handleCreateVisit} className="flex-1 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700">
+              Cấp số thứ tự
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+==================== src\components\patient\VisitTimeline.tsx ====================
+import { clsx } from 'clsx';
+import { Check, Clock, Circle } from 'lucide-react';
+import type { PatientStatus, StatusHistoryEntry } from '../../types';
+
+const ALL_STEPS: { status: PatientStatus; label: string; shortLabel: string }[] = [
+  { status: 'WAITING_EXAM', label: 'Tiếp Nhận & Chờ Khám', shortLabel: 'Chờ Khám' },
+  { status: 'IN_EXAM', label: 'Đang Khám', shortLabel: 'Đang Khám' },
+  { status: 'WAITING_CLS', label: 'Chờ Cận Lâm Sàng', shortLabel: 'Chờ CLS' },
+  { status: 'IN_CLS', label: 'Đang Thực Hiện CLS', shortLabel: 'Đang CLS' },
+  { status: 'WAITING_RESULT', label: 'Chờ Kết Quả', shortLabel: 'Chờ KQ' },
+  { status: 'WAITING_CONCLUSION', label: 'Chờ Kết Luận', shortLabel: 'Chờ KL' },
+  { status: 'WAITING_PAYMENT', label: 'Chờ Thanh Toán', shortLabel: 'Thanh Toán' },
+  { status: 'COMPLETED', label: 'Hoàn Tất', shortLabel: 'Hoàn Tất' },
+];
+
+const STATUS_ORDER: PatientStatus[] = [
+  'WAITING_EXAM', 'IN_EXAM', 'WAITING_CLS', 'IN_CLS',
+  'WAITING_RESULT', 'WAITING_CONCLUSION', 'WAITING_PAYMENT', 'COMPLETED',
+];
+
+function getStepState(stepStatus: PatientStatus, currentStatus: PatientStatus): 'done' | 'active' | 'pending' {
+  const stepIdx = STATUS_ORDER.indexOf(stepStatus);
+  const currIdx = STATUS_ORDER.indexOf(currentStatus);
+  if (stepIdx < currIdx) return 'done';
+  if (stepIdx === currIdx) return 'active';
+  return 'pending';
+}
+
+interface VisitTimelineProps {
+  currentStatus: PatientStatus;
+  history?: StatusHistoryEntry[];
+  compact?: boolean;
+  showCLS?: boolean;
+}
+
+export default function VisitTimeline({ currentStatus, history = [], compact = false, showCLS = true }: VisitTimelineProps) {
+  const steps = showCLS ? ALL_STEPS : ALL_STEPS.filter(s =>
+    !['WAITING_CLS', 'IN_CLS', 'WAITING_RESULT', 'WAITING_CONCLUSION'].includes(s.status)
+  );
+
+  const getHistoryEntry = (status: PatientStatus) =>
+    history.find(h => h.toStatus === status);
+
+  if (compact) {
+    // Horizontal compact version
+    const activeIdx = STATUS_ORDER.indexOf(currentStatus);
+    return (
+      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        {steps.map((step, i) => {
+          const state = getStepState(step.status, currentStatus);
+          return (
+            <div key={step.status} className="flex items-center gap-1 flex-shrink-0">
+              <div className={clsx(
+                'flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors',
+                state === 'done' && 'bg-green-100 text-green-700',
+                state === 'active' && 'bg-sky-600 text-white',
+                state === 'pending' && 'bg-gray-100 text-gray-400'
+              )}>
+                {state === 'done' ? <Check size={10} /> : state === 'active' ? <Clock size={10} className="animate-pulse" /> : <Circle size={10} />}
+                {step.shortLabel}
+              </div>
+              {i < steps.length - 1 && (
+                <div className={clsx('w-3 h-px', state === 'done' ? 'bg-green-400' : 'bg-gray-200')} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Full vertical timeline
+  return (
+    <div className="space-y-0">
+      {steps.map((step, i) => {
+        const state = getStepState(step.status, currentStatus);
+        const entry = getHistoryEntry(step.status);
+        const isLast = i === steps.length - 1;
+
+        return (
+          <div key={step.status} className="flex gap-4">
+            {/* Timeline line + dot */}
+            <div className="flex flex-col items-center">
+              <div className={clsx(
+                'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ring-2',
+                state === 'done' && 'bg-green-500 ring-green-100 text-white',
+                state === 'active' && 'bg-sky-600 ring-sky-100 text-white',
+                state === 'pending' && 'bg-white ring-gray-200 text-gray-300'
+              )}>
+                {state === 'done' ? <Check size={14} /> : state === 'active' ? <Clock size={14} className="animate-pulse" /> : <Circle size={14} />}
+              </div>
+              {!isLast && (
+                <div className={clsx('w-0.5 flex-1 min-h-[24px]', state === 'done' ? 'bg-green-300' : 'bg-gray-200')} />
+              )}
+            </div>
+
+            {/* Content */}
+            <div className={clsx('flex-1 pb-4', isLast && 'pb-0')}>
+              <div className="flex items-start justify-between gap-2">
+                <p className={clsx(
+                  'text-sm font-semibold leading-none',
+                  state === 'active' && 'text-sky-700',
+                  state === 'done' && 'text-gray-700',
+                  state === 'pending' && 'text-gray-400'
+                )}>
+                  {step.label}
+                  {state === 'active' && <span className="ml-2 text-xs font-normal text-sky-500">← Đang ở đây</span>}
+                </p>
+                {entry && (
+                  <span className="text-xs text-gray-400 flex-shrink-0">{entry.timestamp.slice(0, 5)}</span>
+                )}
+              </div>
+              {entry && (
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-xs text-gray-500">Thực hiện bởi: <span className="font-medium">{entry.performedByName}</span></p>
+                  {entry.note && <p className="text-xs text-gray-400 italic">{entry.note}</p>}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+
+==================== src\components\queue\QueueTable.tsx ====================
+import { useState } from 'react';
+import { Search, Filter, Phone, ArrowRightLeft, XCircle, ChevronUp, ChevronDown, Minus } from 'lucide-react';
+import { clsx } from 'clsx';
+import type { QueueItem, QueueLane, PatientStatus } from '../../types';
+import StatusBadge from '../ui/StatusBadge';
+import { PriorityBadge, LaneBadge } from '../ui/PriorityBadge';
+import { ConfirmModal } from '../ui/Modal';
+
+const LANE_ORDER: QueueLane[] = ['PRIORITY', 'APPOINTMENT', 'AFTER_CLS', 'NORMAL'];
+
+function PriorityScore({ score }: { score: number }) {
+  const color = score >= 85 ? 'text-red-600 bg-red-50' : score >= 60 ? 'text-amber-600 bg-amber-50' : 'text-gray-500 bg-gray-50';
+  return <span className={clsx('text-xs font-bold px-1.5 py-0.5 rounded', color)}>{score}</span>;
+}
+
+interface QueueTableProps {
+  items: QueueItem[];
+  onCall?: (id: string) => void;
+  onDispatch?: (item: QueueItem) => void;
+  onCancel?: (item: QueueItem) => void;
+  showActions?: boolean;
+  title?: string;
+}
+
+export default function QueueTable({ items, onCall, onDispatch, onCancel, showActions = true, title }: QueueTableProps) {
+  const [search, setSearch] = useState('');
+  const [laneFilter, setLaneFilter] = useState<QueueLane | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<PatientStatus | 'ALL'>('ALL');
+  const [sortField, setSortField] = useState<'priorityScore' | 'queuedAt'>('priorityScore');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [cancelTarget, setCancelTarget] = useState<QueueItem | null>(null);
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
+  };
+
+  const filtered = items
+    .filter(item => {
+      if (search && !item.patientName.toLowerCase().includes(search.toLowerCase()) &&
+          !item.ticketNumber.toLowerCase().includes(search.toLowerCase())) return false;
+      if (laneFilter !== 'ALL' && item.lane !== laneFilter) return false;
+      if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const mult = sortDir === 'asc' ? 1 : -1;
+      if (sortField === 'priorityScore') return (a.priorityScore - b.priorityScore) * mult;
+      return a.queuedAt.localeCompare(b.queuedAt) * mult;
+    });
+
+  // Group by lane for display
+  const byLane: Record<QueueLane, QueueItem[]> = { PRIORITY: [], APPOINTMENT: [], AFTER_CLS: [], NORMAL: [] };
+  filtered.forEach(item => byLane[item.lane].push(item));
+
+  const SortIcon = ({ field }: { field: typeof sortField }) =>
+    sortField === field ? (sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />) : <Minus size={12} className="opacity-30" />;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row gap-3">
+        {title && <h3 className="text-sm font-semibold text-gray-800 self-center">{title}</h3>}
+        <div className="flex flex-1 items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Tên, số thứ tự..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-300"
+            />
+          </div>
+          {/* Lane filter */}
+          <select
+            value={laneFilter}
+            onChange={e => setLaneFilter(e.target.value as typeof laneFilter)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          >
+            <option value="ALL">Tất cả làn</option>
+            <option value="PRIORITY">Ưu tiên</option>
+            <option value="APPOINTMENT">Đặt lịch</option>
+            <option value="NORMAL">Thường</option>
+            <option value="AFTER_CLS">Sau CLS</option>
+          </select>
+          {/* Status filter */}
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="WAITING_EXAM">Chờ khám</option>
+            <option value="IN_EXAM">Đang khám</option>
+            <option value="WAITING_CLS">Chờ CLS</option>
+            <option value="WAITING_CONCLUSION">Chờ kết luận</option>
+            <option value="WAITING_PAYMENT">Chờ thanh toán</option>
+          </select>
+          <span className="text-xs text-gray-400 ml-auto">{filtered.length} bệnh nhân</span>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">STT</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Bệnh Nhân</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Làn / Ưu Tiên</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Trạng Thái</th>
+              <th
+                className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => toggleSort('priorityScore')}
+              >
+                <span className="flex items-center gap-1">Điểm ưu tiên <SortIcon field="priorityScore" /></span>
+              </th>
+              <th
+                className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => toggleSort('queuedAt')}
+              >
+                <span className="flex items-center gap-1">Thời gian chờ <SortIcon field="queuedAt" /></span>
+              </th>
+              {showActions && <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Thao Tác</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
+                  Không có bệnh nhân trong hàng đợi
+                </td>
+              </tr>
+            )}
+            {LANE_ORDER.map(lane => {
+              const group = byLane[lane];
+              if (group.length === 0) return null;
+              return group.map((item, idx) => (
+                <tr key={item.id} className={clsx(
+                  'border-b border-gray-50 hover:bg-gray-50/70 transition-colors',
+                  item.priorityReason === 'EMERGENCY' && 'bg-red-50/50',
+                  idx === 0 && lane !== 'NORMAL' && 'border-t-2 border-t-gray-200'
+                )}>
+                  <td className="px-4 py-3">
+                    <span className="font-mono font-bold text-sky-700 text-sm">{item.ticketNumber}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900">{item.patientName}</div>
+                    <div className="text-xs text-gray-400">
+                      {item.patientAge} tuổi · {item.patientGender === 'MALE' ? 'Nam' : 'Nữ'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      <LaneBadge lane={item.lane} size="sm" />
+                      {item.priorityReason && <PriorityBadge reason={item.priorityReason} size="sm" />}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={item.status} size="sm" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <PriorityScore score={item.priorityScore} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    <div>{item.queuedAt.slice(0, 5)}</div>
+                    <div className="text-gray-400">~{item.estimatedWaitMinutes} phút</div>
+                  </td>
+                  {showActions && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {onCall && (
+                          <button
+                            onClick={() => onCall(item.id)}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors"
+                            title="Gọi bệnh nhân"
+                          >
+                            <Phone size={12} />
+                            Gọi
+                          </button>
+                        )}
+                        {onDispatch && (
+                          <button
+                            onClick={() => onDispatch(item)}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+                            title="Chuyển phòng"
+                          >
+                            <ArrowRightLeft size={12} />
+                          </button>
+                        )}
+                        {onCancel && (
+                          <button
+                            onClick={() => setCancelTarget(item)}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                            title="Hủy lượt khám"
+                          >
+                            <XCircle size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ));
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cancel confirm */}
+      <ConfirmModal
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => {
+          if (cancelTarget && onCancel) {
+            onCancel(cancelTarget);
+            setCancelTarget(null);
+          }
+        }}
+        title="Xác nhận hủy lượt khám"
+        message={`Bạn có chắc muốn hủy lượt khám của bệnh nhân ${cancelTarget?.patientName}? Thao tác này không thể hoàn tác.`}
+        confirmLabel="Hủy Lượt Khám"
+        confirmVariant="danger"
+      />
+    </div>
+  );
+}
+
+
+
+==================== src\components\dispatch\DispatchSuggestionPanel.tsx ====================
+import { useState } from 'react';
+import { CheckCircle, Users, Clock, Zap, AlertTriangle, ThumbsUp } from 'lucide-react';
+import { clsx } from 'clsx';
+import type { Room, Visit } from '../../types';
+import { LoadBadge } from '../ui/PriorityBadge';
+import { useHospital } from '../../context/HospitalContext';
+import { useAuth } from '../../context/AuthContext';
+
+interface SuggestedRoom extends Room {
+  suggestionScore: number;
+  reasons: string[];
+  isRecommended: boolean;
+}
+
+function scoreRoom(room: Room, targetType: Room['type']): SuggestedRoom {
+  let score = 100;
+  const reasons: string[] = [];
+
+  // Penalize by load level
+  if (room.loadLevel === 'OVERLOAD') { score -= 50; }
+  else if (room.loadLevel === 'WARNING') { score -= 20; }
+  else { reasons.push('Phòng ít tải hơn'); }
+
+  // Penalize by wait time
+  if (room.avgWaitMinutes > 60) { score -= 30; reasons.push('⚠ Thời gian chờ dài'); }
+  else if (room.avgWaitMinutes <= 20) { score += 10; reasons.push('Thời gian chờ ngắn'); }
+
+  // Penalize by current waiting
+  score -= room.currentWaiting * 3;
+  if (room.currentWaiting <= 3) reasons.push('Hàng đợi ngắn');
+
+  // Type match bonus
+  if (room.type === targetType) { score += 15; reasons.push('Phù hợp dịch vụ'); }
+
+  // Status
+  if (room.status !== 'ACTIVE') score = -999;
+
+  return { ...room, suggestionScore: Math.max(0, score), reasons, isRecommended: false };
+}
+
+interface DispatchSuggestionPanelProps {
+  visit: Visit;
+  targetType?: Room['type'];
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}
+
+export default function DispatchSuggestionPanel({ visit, targetType = 'EXAM', onConfirm, onCancel }: DispatchSuggestionPanelProps) {
+  const { rooms, dispatchPatient } = useHospital();
+  const { user } = useAuth();
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [reason, setReason] = useState('');
+  const [dispatching, setDispatching] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const eligibleRooms: SuggestedRoom[] = rooms
+    .filter(r => r.type === targetType && r.status === 'ACTIVE')
+    .map(r => scoreRoom(r, targetType))
+    .sort((a, b) => b.suggestionScore - a.suggestionScore)
+    .map((r, i) => ({ ...r, isRecommended: i === 0 }));
+
+  const displayedRooms = showAll ? eligibleRooms : eligibleRooms.slice(0, 4);
+  const recommended = eligibleRooms[0];
+
+  const handleDispatch = () => {
+    if (!selectedRoomId || !user) return;
+    const followedSuggestion = selectedRoomId === recommended?.id;
+    setDispatching(true);
+    setTimeout(() => {
+      dispatchPatient(
+        visit.id,
+        selectedRoomId,
+        followedSuggestion,
+        reason || 'Điều phối thủ công',
+        user.id,
+        user.name
+      );
+      setDispatching(false);
+      onConfirm?.();
+    }, 500);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Visit summary */}
+      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <p className="text-xs text-slate-500 font-medium">Bệnh nhân cần điều phối</p>
+        <p className="font-semibold text-sm text-slate-800 mt-0.5">{visit.patientName}</p>
+        <p className="text-xs text-slate-500">{visit.ticketNumber} · {visit.chiefComplaint}</p>
+      </div>
+
+      {/* Room list */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Phòng {targetType === 'EXAM' ? 'Khám' : targetType === 'LAB' ? 'Xét Nghiệm' : 'Chẩn Đoán Hình Ảnh'} Khả Dụng
+        </p>
+        <div className="space-y-2">
+          {displayedRooms.map(room => (
+            <button
+              key={room.id}
+              onClick={() => setSelectedRoomId(room.id)}
+              className={clsx(
+                'w-full text-left p-3 rounded-xl border transition-all',
+                selectedRoomId === room.id
+                  ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-200'
+                  : room.isRecommended
+                  ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  {/* Selected indicator */}
+                  <div className={clsx(
+                    'w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center',
+                    selectedRoomId === room.id ? 'border-sky-500 bg-sky-500' : 'border-gray-300'
+                  )}>
+                    {selectedRoomId === room.id && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-800">{room.name}</span>
+                      {room.isRecommended && (
+                        <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          <ThumbsUp size={10} />
+                          Gợi ý
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{room.department} · Tầng {room.floor || 1}</p>
+                    {/* Reasons */}
+                    {room.reasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {room.reasons.map((r, i) => (
+                          <span key={i} className={clsx(
+                            'text-xs px-1.5 py-0.5 rounded-full',
+                            r.startsWith('⚠') ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                          )}>{r}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <LoadBadge level={room.loadLevel} />
+                  <div className="text-xs text-gray-500 flex items-center gap-1">
+                    <Users size={10} />{room.currentWaiting}
+                    <Clock size={10} className="ml-1" />~{room.avgWaitMinutes} ph
+                  </div>
+                  <div className={clsx('text-xs font-bold', room.suggestionScore >= 70 ? 'text-emerald-600' : room.suggestionScore >= 40 ? 'text-amber-600' : 'text-red-500')}>
+                    Điểm: {room.suggestionScore}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+        {eligibleRooms.length > 4 && (
+          <button onClick={() => setShowAll(!showAll)} className="mt-2 w-full text-xs text-sky-600 hover:text-sky-700 font-medium py-1">
+            {showAll ? 'Thu gọn' : `Xem thêm ${eligibleRooms.length - 4} phòng`}
+          </button>
+        )}
+        {eligibleRooms.length === 0 && (
+          <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <AlertTriangle size={16} />
+            Không tìm thấy phòng phù hợp. Vui lòng liên hệ quản lý.
+          </div>
+        )}
+      </div>
+
+      {/* Reason input */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Ghi chú điều phối</label>
+        <input
+          type="text"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Lý do điều phối (tùy chọn)"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        {onCancel && (
+          <button onClick={onCancel} className="flex-1 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+            Hủy
+          </button>
+        )}
+        <button
+          onClick={handleDispatch}
+          disabled={!selectedRoomId || dispatching}
+          className="flex-1 flex items-center justify-center gap-2 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {dispatching ? (
+            <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Đang xử lý...</>
+          ) : (
+            <><CheckCircle size={15} />Xác Nhận Điều Phối</>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+

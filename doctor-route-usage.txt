@@ -1,0 +1,4 @@
+﻿D:\4.2\Final Project\final project\src\pages\DoctorPage.tsx:2: import DoctorWorkspace from '../components/doctor/DoctorWorkspace';
+D:\4.2\Final Project\final project\src\pages\DoctorPage.tsx:7: export default function DoctorPage() {
+D:\4.2\Final Project\final project\src\pages\DoctorPage.tsx:29:       <DoctorWorkspace roomId={roomId} />
+D:\4.2\Final Project\final project\src\pages\LoginPage.tsx:20:   DOCTOR: '/doctor',

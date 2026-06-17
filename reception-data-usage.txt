@@ -1,0 +1,393 @@
+﻿D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:20: type ReceptionStatus =
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:41:   status: ReceptionStatus;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:54:   status: 'Đang làm việc' | 'Tạm nghỉ' | 'Hết lịch';
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:57: const STATUS_FILTERS = ['Chờ tiếp nhận', 'Đã tiếp nhận', 'Chờ khám', 'Đang khám', 'Chờ CLS', 'Hoàn tất'] as const;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:59: const PATIENTS: ReceptionPatient[] = [
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:60:   { stt: '001', code: 'BN001', name: 'Nguyễn Thị Lan', phone: '0987654321', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ tiếp nhận', priority: true, waitTime: '04 phút', expectedWait: '10 phút', address: 'Quận 3, TP.HCM', note: 'Đã đặt lịch trước, thai 28 tuần, cần xác minh thông tin BHYT.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:61:   { stt: '002', code: 'BN002', name: 'Trần Minh Anh', phone: '0912345678', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Đã tiếp nhận', waitTime: '08 phút', expectedWait: '18 phút', address: 'Quận 7, TP.HCM', note: 'Đã tạo hồ sơ và cần cấp số thứ tự.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:62:   { stt: '003', code: 'BN003', name: 'Phạm Thu Hà', phone: '0901122334', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Chờ khám', waitTime: '21 phút', expectedWait: '25 phút', address: 'Bình Thạnh, TP.HCM', note: 'Đã xác nhận lịch hẹn, đang chờ gọi vào phòng khám.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:63:   { stt: '004', code: 'BN004', name: 'Lê Hoàng Mai', phone: '0933445566', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Chờ CLS', waitTime: '34 phút', expectedWait: '20 phút', address: 'Thủ Đức, TP.HCM', note: 'Cần hỗ trợ điều phối sang khu cận lâm sàng.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:64:   { stt: '005', code: 'BN005', name: 'Hoàng Thu Trang', phone: '0966778899', registrationType: 'Đặt lịch trước', department: 'Sản khoa', expectedDoctor: 'BS Nguyễn Văn An', room: 'Phòng 201', status: 'Chờ xác nhận lịch hẹn', waitTime: '02 phút', expectedWait: '12 phút', address: 'Quận 10, TP.HCM', note: 'Lịch hẹn 09:30, chưa xác nhận có mặt.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:65:   { stt: '006', code: 'BN006', name: 'Đặng Ngọc Anh', phone: '0977889900', registrationType: 'Đến trực tiếp', department: 'Phụ khoa', expectedDoctor: 'BS Trần Thu Hà', room: 'Phòng 204', status: 'Hoàn tất', waitTime: '00 phút', expectedWait: '00 phút', address: 'Gò Vấp, TP.HCM', note: 'Đã hoàn tất luồng tiếp nhận trong ngày.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:66:   { stt: '007', code: 'BN007', name: 'Vũ Thanh Hương', phone: '0909988776', registrationType: 'Đến trực tiếp', department: 'Sản khoa', expectedDoctor: 'BS Lê Minh Quân', room: 'Phòng 202', status: 'Đang khám', priority: true, waitTime: '16 phút', expectedWait: '05 phút', address: 'Tân Bình, TP.HCM', note: 'Bệnh nhân ưu tiên, đã vào phòng khám.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:67:   { stt: '008', code: 'BN008', name: 'Bùi Khánh Linh', phone: '0911223344', registrationType: 'Đặt lịch trước', department: 'Phụ khoa', expectedDoctor: 'BS Mai Thanh Tú', room: 'Phòng 205', status: 'Chờ kết quả', waitTime: '43 phút', expectedWait: '15 phút', address: 'Phú Nhuận, TP.HCM', note: 'Theo dõi trạng thái để hướng dẫn bệnh nhân quay lại phòng khám.' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:71:   { name: 'BS Nguyễn Văn An', department: 'Sản khoa', waiting: 12, time: '07:30 - 11:30', status: 'Đang làm việc' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:72:   { name: 'BS Trần Thu Hà', department: 'Phụ khoa', waiting: 8, time: '08:00 - 12:00', status: 'Đang làm việc' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:73:   { name: 'BS Lê Minh Quân', department: 'Sản khoa', waiting: 0, time: '13:00 - 17:00', status: 'Tạm nghỉ' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:74:   { name: 'BS Mai Thanh Tú', department: 'Phụ khoa', waiting: 5, time: '07:30 - 16:30', status: 'Đang làm việc' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:75:   { name: 'BS Phạm Hoài Nam', department: 'Sản khoa', waiting: 0, time: '07:30 - 10:30', status: 'Hết lịch' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:78: const STATUS_STYLES: Record<ReceptionStatus, string> = {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:91: const ACTIONS_BY_STATUS: Record<ReceptionStatus, string[]> = {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:104: function StatusBadge({ status }: { status: ReceptionStatus }) {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:106:     <span className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap', STATUS_STYLES[status])}>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:108:       {status}
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:131:   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:136:   const filteredPatients = useMemo(() => {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:138:     return PATIENTS.filter(patient => {
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:144:       const matchesStatus = statusFilter === 'Tất cả' || patient.status === statusFilter;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:145:       return matchesKeyword && matchesStatus;
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:147:   }, [searchTerm, statusFilter]);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:157:   const selectedPatient = PATIENTS.find(patient => patient.code === selectedCode) ?? filteredPatients[0] ?? PATIENTS[0];
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:158:   const newArrival = PATIENTS.find(patient => patient.status === 'Chờ tiếp nhận');
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:159:   const waitingAppointment = PATIENTS.find(patient => patient.status === 'Chờ xác nhận lịch hẹn');
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:160:   const dispatchPatient = PATIENTS.find(patient => patient.status === 'Chờ CLS') ?? PATIENTS.find(patient => patient.status === 'Chờ khám');
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:164:     { label: 'Đặt lịch chờ xác nhận', value: PATIENTS.filter(p => p.status === 'Chờ xác nhận lịch hẹn').length, icon: CalendarCheck, accent: 'bg-amber-50 text-amber-700 border-amber-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:165:     { label: 'Bệnh nhân đang chờ khám', value: PATIENTS.filter(p => p.status === 'Chờ khám').length, icon: Users, accent: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:166:     { label: 'Bệnh nhân cần điều phối', value: PATIENTS.filter(p => ['Chờ CLS', 'Chờ khám'].includes(p.status)).length, icon: ArrowRightLeft, accent: 'bg-purple-50 text-purple-700 border-purple-100' },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:172:     step === selectedPatient.status ||
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:173:     (selectedPatient.status === 'Chờ tiếp nhận' && step === 'Tiếp nhận') ||
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:174:     (selectedPatient.status === 'Đã tiếp nhận' && step === 'Tạo phiếu khám') ||
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:175:     (selectedPatient.status === 'Đang thực hiện CLS' && step === 'Chờ kết quả')
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:179:   const showAlerts = ['reception', 'overview', 'appointments', 'notifications'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:180:   const showPatientTable = ['reception', 'appointments', 'patients'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:182:   const showDetailPanel = ['reception', 'appointments', 'patients', 'notifications', 'account'].includes(activeView);
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:186:     appointments: 'Đăng ký khám / Đặt lịch',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:187:     patients: 'Danh sách bệnh nhân',
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:230:                 {['Tất cả', ...STATUS_FILTERS].map(status => (
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:232:                     key={status}
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:233:                     onClick={() => setStatusFilter(status)}
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:236:                       statusFilter === status
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:241:                     {status}
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:279:                   { label: 'Lịch hẹn chờ xác nhận', patient: waitingAppointment, icon: CalendarCheck },
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:301:             {activeView === 'appointments' && (
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:320:                   <h2 className="text-base font-bold text-gray-900">{activeView === 'patients' ? 'Danh sách bệnh nhân' : 'Danh sách tiếp nhận và hàng đợi'}</h2>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:347:                     {filteredPatients.map(patient => (
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:360:                         <td className="px-4 py-3"><StatusBadge status={patient.status} /></td>
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:376:                             {ACTIONS_BY_STATUS[patient.status].map(action => (
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:440:                         schedule.status === 'Đang làm việc' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:441:                         schedule.status === 'Tạm nghỉ' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:444:                         {schedule.status}
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:502:               <StatusBadge status={selectedPatient.status} />
+D:\4.2\Final Project\final project\src\pages\ReceptionPage.tsx:513:                     done={index < currentTimelineIndex || selectedPatient.status === 'Hoàn tất'}
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:3:   Patient, Doctor, Room, Service, Visit, QueueItem,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:4:   CLSOrder, CLSResult, Invoice, Appointment, StatusHistoryEntry,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:5:   DispatchHistoryEntry, PatientStatus, DashboardStats, ActionLog
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:8:   MOCK_PATIENTS, MOCK_DOCTORS, MOCK_ROOMS, MOCK_SERVICES,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:9:   MOCK_VISITS, MOCK_QUEUE_ITEMS, MOCK_CLS_ORDERS, MOCK_CLS_RESULTS,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:10:   MOCK_INVOICES, MOCK_APPOINTMENTS, MOCK_STATUS_HISTORY,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:15:   patients: Patient[];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:19:   visits: Visit[];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:20:   queueItems: QueueItem[];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:24:   appointments: Appointment[];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:25:   statusHistory: StatusHistoryEntry[];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:31:   addPatient: (patient: Omit<Patient, 'id' | 'patientCode'>) => Patient;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:32:   updatePatient: (id: string, data: Partial<Patient>) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:33:   createVisit: (patientId: string, data: Partial<Visit>) => Visit;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:34:   updateVisitStatus: (visitId: string, status: PatientStatus, note?: string, performedBy?: string, performedByName?: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:35:   dispatchPatient: (visitId: string, toRoomId: string, followedSuggestion: boolean, reason: string, dispatchedBy: string, dispatchedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:36:   callPatient: (queueItemId: string, roomId: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:37:   completeVisit: (visitId: string, finalDiagnosis: string, conclusion: string, doctorId: string, treatmentPlan?: string, performedByName?: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:38:   orderCLS: (visitId: string, patientId: string, patientName: string, orders: Array<{ serviceId: string; serviceName: string; roomId: string; priority: 'URGENT' | 'ROUTINE'; clinicalNote?: string }>, orderedBy: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:39:   updateCLSStatus: (orderId: string, status: CLSOrder['status']) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:40:   saveCLSResult: (orderId: string, visitId: string, result: string, isAbnormal: boolean, performedBy: string, note?: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:41:   updateDoctorInfo: (visitId: string, data: { chiefComplaint?: string; provisionalDiagnosis?: string; notes?: string; treatmentDirection?: string }) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:42:   cancelVisit: (visitId: string, reason: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:44:   callQueuePatient: (queueItemId: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:45:   startPatientService: (visitId: string, queueItemId: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:46:   markPatientNoShow: (visitId: string, queueItemId: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:47:   transferWaitingPatient: (visitId: string, queueItemId: string, toRoomId: string, reason: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:48:   acceptReallocationSuggestion: (visitId: string, queueItemId: string, toRoomId: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:49:   dismissReallocationSuggestion: (visitId: string, reason: string, performedBy: string, performedByName: string) => void;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:63:   const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:67:   const [visits, setVisits] = useState<Visit[]>(MOCK_VISITS);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:68:   const [queueItems, setQueueItems] = useState<QueueItem[]>(MOCK_QUEUE_ITEMS);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:72:   const [appointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:73:   const [statusHistory, setStatusHistory] = useState<StatusHistoryEntry[]>(MOCK_STATUS_HISTORY);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:78:   const addPatient = useCallback((data: Omit<Patient, 'id' | 'patientCode'>) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:80:     const patientCode = `BN${String(patients.length + 1).padStart(3, '0')}`;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:82:     setPatients(prev => [...prev, newPatient]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:84:   }, [patients.length]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:86:   const updatePatient = useCallback((id: string, data: Partial<Patient>) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:87:     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:90:   const createVisit = useCallback((patientId: string, data: Partial<Visit>) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:91:     const patient = patients.find(p => p.id === patientId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:92:     const visitCount = visits.length + 1;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:93:     const lanePrefix = data.lane === 'APPOINTMENT' ? 'A' : data.lane === 'PRIORITY' ? 'P' : 'N';
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:94:     const ticketNumber = `${lanePrefix}${String(visitCount).padStart(3, '0')}`;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:95:     const newVisit: Visit = {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:100:       visitDate: new Date().toISOString().slice(0, 10),
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:101:       status: 'WAITING_EXAM',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:107:     setVisits(prev => [...prev, newVisit]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:108:     // Add to queue
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:109:     const newQueueItem: QueueItem = {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:111:       visitId: newVisit.id,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:117:       lane: newVisit.lane,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:118:       priorityScore: newVisit.priorityScore,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:120:       status: 'WAITING_EXAM',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:123:       queuedAt: formatTime(),
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:126:     setQueueItems(prev => [...prev, newQueueItem]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:127:     setDashboardStats(prev => ({ ...prev, totalPatientsToday: prev.totalPatientsToday + 1, waitingExam: prev.waitingExam + 1, dispatchCount: prev.dispatchCount + 1 }));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:128:     return newVisit;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:129:   }, [patients, visits.length]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:131:   const updateVisitStatus = useCallback((visitId: string, status: PatientStatus, note?: string, performedBy = 'system', performedByName = 'Hệ thống') => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:132:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:133:     setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:134:     setStatusHistory(prev => [...prev, {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:136:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:137:       toStatus: status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:145:   const dispatchPatient = useCallback((visitId: string, toRoomId: string, followedSuggestion: boolean, reason: string, dispatchedBy: string, dispatchedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:146:     const visit = visits.find(v => v.id === visitId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:148:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:149:     setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, targetRoomId: toRoomId } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:155:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:156:       patientId: visit?.patientId ?? '',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:157:       patientName: visit?.patientName ?? '',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:158:       fromRoomId: visit?.roomId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:168:   }, [visits, rooms]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:170:   const callPatient = useCallback((queueItemId: string, _roomId: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:171:     setQueueItems(prev => prev.map(q => q.id === queueItemId ? { ...q, calledAt: formatTime() } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:174:   const completeVisit = useCallback((visitId: string, finalDiagnosis: string, conclusion: string, doctorId: string, treatmentPlan?: string, performedByName = 'Bác sĩ') => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:175:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, finalDiagnosis, conclusion, treatmentPlan, status: 'WAITING_PAYMENT', doctorId, completionTime: formatTime() } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:176:     setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status: 'WAITING_PAYMENT' } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:177:     setStatusHistory(prev => [...prev, {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:179:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:180:       toStatus: 'WAITING_PAYMENT',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:188:   const orderCLS = useCallback((visitId: string, patientId: string, patientName: string, orders: Array<{ serviceId: string; serviceName: string; roomId: string; priority: 'URGENT' | 'ROUTINE'; clinicalNote?: string }>, orderedBy: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:191:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:198:       status: 'PENDING' as const,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:204:     setVisits(prev => prev.map(v => v.id === visitId ? {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:206:       status: 'WAITING_CLS',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:209:     updateVisitStatus(visitId, 'WAITING_CLS', 'Chỉ định CLS', orderedBy);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:211:   }, [updateVisitStatus]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:213:   const updateCLSStatus = useCallback((orderId: string, status: CLSOrder['status']) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:214:     setClsOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:217:   const saveCLSResult = useCallback((orderId: string, visitId: string, result: string, isAbnormal: boolean, performedBy: string, note?: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:221:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:229:     setClsOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'COMPLETED', completedAt: formatTime(), resultId: newResult.id } : o));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:230:     // Check if all CLS for this visit are done
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:231:     const visitOrders = clsOrders.filter(o => o.visitId === visitId && o.id !== orderId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:232:     const allDone = visitOrders.every(o => o.status === 'COMPLETED' || o.status === 'CANCELLED');
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:234:       setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: 'WAITING_CONCLUSION' } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:235:       setQueueItems(prev => prev.map(q => q.visitId === visitId ? { ...q, status: 'WAITING_CONCLUSION', lane: 'AFTER_CLS' } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:239:   const updateDoctorInfo = useCallback((visitId: string, data: { chiefComplaint?: string; provisionalDiagnosis?: string; notes?: string; treatmentDirection?: string }) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:240:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, ...data } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:243:   const cancelVisit = useCallback((visitId: string, _reason: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:244:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: 'CANCELLED' } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:245:     setQueueItems(prev => prev.filter(q => q.visitId !== visitId));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:246:     setStatusHistory(prev => [...prev, {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:248:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:249:       toStatus: 'CANCELLED',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:257:       actionType: 'CANCEL_VISIT',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:258:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:270:   const callQueuePatient = useCallback((queueItemId: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:272:     setQueueItems(prev => prev.map(q =>
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:273:       q.id === queueItemId ? { ...q, calledAt } : q
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:275:     const q = queueItems.find(qi => qi.id === queueItemId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:280:         visitId: q.visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:283:         fromStatus: q.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:289:   }, [queueItems]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:291:   const startPatientService = useCallback((visitId: string, queueItemId: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:292:     const visit = visits.find(v => v.id === visitId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:293:     if (!visit) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:294:     const statusMap: Partial<Record<PatientStatus, PatientStatus>> = {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:299:     const nextStatus = statusMap[visit.status];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:300:     if (!nextStatus) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:302:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, status: nextStatus } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:303:     setQueueItems(prev => prev.map(q => q.id === queueItemId ? { ...q, status: nextStatus, servedAt } : q));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:304:     setStatusHistory(prev => [...prev, {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:306:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:307:       fromStatus: visit.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:308:       toStatus: nextStatus,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:317:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:318:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:319:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:320:       fromStatus: visit.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:321:       toStatus: nextStatus,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:326:   }, [visits]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:328:   const markPatientNoShow = useCallback((visitId: string, queueItemId: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:330:     const q = queueItems.find(qi => qi.id === queueItemId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:331:     // Re-queue at the end with new queuedAt so they go to bottom
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:332:     setQueueItems(prev => prev.map(qi =>
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:333:       qi.id === queueItemId
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:334:         ? { ...qi, calledAt: undefined, queuedAt: noShowAt, noShowCount: (qi.noShowCount ?? 0) + 1, estimatedWaitMinutes: qi.estimatedWaitMinutes + 15 }
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:337:     setStatusHistory(prev => [...prev, {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:339:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:340:       toStatus: q?.status ?? 'WAITING_EXAM',
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:349:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:352:       fromStatus: q?.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:358:   }, [queueItems]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:360:   const transferWaitingPatient = useCallback((visitId: string, queueItemId: string, toRoomId: string, reason: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:361:     const visit = visits.find(v => v.id === visitId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:363:     const q = queueItems.find(qi => qi.id === queueItemId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:364:     if (!visit || !toRoom) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:365:     // Only allow for waiting patients
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:366:     const waitingStatuses: PatientStatus[] = ['WAITING_EXAM', 'WAITING_CLS', 'WAITING_CONCLUSION', 'WAITING_RESULT'];
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:367:     if (!waitingStatuses.includes(visit.status)) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:368:     const fromRoomId = visit.roomId;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:369:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:370:     setQueueItems(prev => prev.map(qi => qi.id === queueItemId ? { ...qi, targetRoomId: toRoomId } : qi));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:379:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:380:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:381:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:394:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:395:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:396:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:397:       fromStatus: visit.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:406:   }, [visits, rooms, queueItems]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:408:   const acceptReallocationSuggestion = useCallback((visitId: string, queueItemId: string, toRoomId: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:409:     const visit = visits.find(v => v.id === visitId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:411:     const q = queueItems.find(qi => qi.id === queueItemId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:412:     if (!visit || !toRoom) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:413:     const fromRoomId = visit.roomId;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:414:     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, roomId: toRoomId } : v));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:415:     setQueueItems(prev => prev.map(qi => qi.id === queueItemId ? { ...qi, targetRoomId: toRoomId } : qi));
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:423:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:424:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:425:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:438:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:439:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:440:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:441:       fromStatus: visit.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:450:   }, [visits, rooms, queueItems]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:452:   const dismissReallocationSuggestion = useCallback((visitId: string, reason: string, performedBy: string, performedByName: string) => {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:453:     const visit = visits.find(v => v.id === visitId);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:454:     if (!visit) return;
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:458:       visitId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:459:       patientId: visit.patientId,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:460:       patientName: visit.patientName,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:461:       fromStatus: visit.status,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:467:   }, [visits]);
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:471:       patients, doctors, rooms, services, visits, queueItems,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:472:       clsOrders, clsResults, invoices, appointments,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:473:       statusHistory, dispatchHistory, dashboardStats, actionLogs,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:474:       addPatient, updatePatient, createVisit, updateVisitStatus,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:475:       dispatchPatient, callPatient, completeVisit, orderCLS,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:476:       updateCLSStatus, saveCLSResult, updateDoctorInfo, cancelVisit,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:477:       callQueuePatient, startPatientService, markPatientNoShow,
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:485: export function useHospital() {
+D:\4.2\Final Project\final project\src\context\HospitalContext.tsx:487:   if (!ctx) throw new Error('useHospital must be used within HospitalProvider');
+D:\4.2\Final Project\final project\src\data\mockData.ts:2:   User, Patient, Doctor, Room, Service, Visit, QueueItem,
+D:\4.2\Final Project\final project\src\data\mockData.ts:3:   CLSOrder, CLSResult, Invoice, Appointment, StatusHistoryEntry,
+D:\4.2\Final Project\final project\src\data\mockData.ts:31: // ===== PATIENTS =====
+D:\4.2\Final Project\final project\src\data\mockData.ts:32: export const MOCK_PATIENTS: Patient[] = [
+D:\4.2\Final Project\final project\src\data\mockData.ts:58:   { id: 'd1', name: 'BS. Phạm Hoài Nam', specialty: 'Nội Tổng Quát', department: 'Nội Tổng Quát', roomId: 'r1', status: 'BUSY', qualifications: 'CKI Nội Khoa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:59:   { id: 'd2', name: 'BS. Nguyễn Thu Hương', specialty: 'Tim Mạch', department: 'Tim Mạch', roomId: 'r2', status: 'AVAILABLE', qualifications: 'CKII Tim Mạch' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:60:   { id: 'd3', name: 'BS. Lê Đức Minh', specialty: 'Nhi Khoa', department: 'Nhi Khoa', roomId: 'r3', status: 'BUSY', qualifications: 'CKI Nhi Khoa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:61:   { id: 'd4', name: 'BS. Đặng Hoàng Phú', specialty: 'Nội Tổng Quát', department: 'Nội Tổng Quát', roomId: 'r4', status: 'BUSY', qualifications: 'ThS Nội Khoa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:62:   { id: 'd5', name: 'BS. Vũ Thị Lan', specialty: 'Tai Mũi Họng', department: 'Tai Mũi Họng', roomId: 'r5', status: 'AVAILABLE', qualifications: 'CKI TMH' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:63:   { id: 'd6', name: 'BS. Lý Văn Phong', specialty: 'Da Liễu', department: 'Da Liễu', roomId: 'r6', status: 'BREAK', qualifications: 'CKII Da Liễu' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:64:   { id: 'd7', name: 'BS. Hồ Thị Nga', specialty: 'Sản Phụ Khoa', department: 'Sản Phụ Khoa', roomId: 'r7', status: 'BUSY', qualifications: 'CKII Sản Phụ Khoa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:65:   { id: 'd8', name: 'BS. Bùi Công Thắng', specialty: 'Xương Khớp', department: 'Xương Khớp', roomId: 'r8', status: 'AVAILABLE', qualifications: 'CKI Ngoại Khoa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:70:   { id: 'r1', name: 'Phòng Khám 101', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 1', doctorId: 'd1', capacity: 15, currentWaiting: 8, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 42, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 73 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:71:   { id: 'r2', name: 'Phòng Khám 102', type: 'EXAM', department: 'Tim Mạch', floor: 'Tầng 1', doctorId: 'd2', capacity: 12, currentWaiting: 3, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 18, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:72:   { id: 'r3', name: 'Phòng Khám 103', type: 'EXAM', department: 'Nhi Khoa', floor: 'Tầng 1', doctorId: 'd3', capacity: 15, currentWaiting: 12, currentServing: 1, avgServiceMinutes: 12, avgWaitMinutes: 68, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 87 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:73:   { id: 'r4', name: 'Phòng Khám 104', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 1', doctorId: 'd4', capacity: 15, currentWaiting: 7, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 38, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 60 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:74:   { id: 'r5', name: 'Phòng Khám 201', type: 'EXAM', department: 'Tai Mũi Họng', floor: 'Tầng 2', doctorId: 'd5', capacity: 10, currentWaiting: 2, currentServing: 0, avgServiceMinutes: 10, avgWaitMinutes: 10, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 20 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:75:   { id: 'r6', name: 'Phòng Khám 202', type: 'EXAM', department: 'Da Liễu', floor: 'Tầng 2', doctorId: 'd6', capacity: 10, currentWaiting: 0, currentServing: 0, avgServiceMinutes: 12, avgWaitMinutes: 0, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 0 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:76:   { id: 'r7', name: 'Phòng Khám 203', type: 'EXAM', department: 'Sản Phụ Khoa', floor: 'Tầng 2', doctorId: 'd7', capacity: 12, currentWaiting: 9, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 72, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 83 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:77:   { id: 'r8', name: 'Phòng Khám 204', type: 'EXAM', department: 'Xương Khớp', floor: 'Tầng 2', doctorId: 'd8', capacity: 12, currentWaiting: 4, currentServing: 0, avgServiceMinutes: 18, avgWaitMinutes: 24, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:78:   { id: 'r9', name: 'Phòng Xét Nghiệm', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 20, currentWaiting: 11, currentServing: 3, avgServiceMinutes: 8, avgWaitMinutes: 35, loadLevel: 'WARNING', status: 'ACTIVE', utilizationRate: 70 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:79:   { id: 'r10', name: 'Phòng XN Huyết Học', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 15, currentWaiting: 5, currentServing: 2, avgServiceMinutes: 10, avgWaitMinutes: 20, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 47 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:80:   { id: 'r11', name: 'Phòng Siêu Âm', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 8, currentWaiting: 7, currentServing: 1, avgServiceMinutes: 20, avgWaitMinutes: 80, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 100 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:81:   { id: 'r12', name: 'Phòng X-Quang', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng B1', capacity: 15, currentWaiting: 4, currentServing: 1, avgServiceMinutes: 10, avgWaitMinutes: 25, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:82:   { id: 'r13', name: 'Phòng Điện Tim', type: 'LAB', department: 'Cận Lâm Sàng', floor: 'Tầng 1', capacity: 10, currentWaiting: 2, currentServing: 1, avgServiceMinutes: 15, avgWaitMinutes: 15, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 30 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:83:   { id: 'r14', name: 'Phòng CT Scanner', type: 'IMAGING', department: 'Cận Lâm Sàng', floor: 'Tầng B1', capacity: 6, currentWaiting: 5, currentServing: 1, avgServiceMinutes: 25, avgWaitMinutes: 75, loadLevel: 'OVERLOAD', status: 'ACTIVE', utilizationRate: 100 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:84:   { id: 'r15', name: 'Phòng Khám Tổng Quát VIP', type: 'EXAM', department: 'Nội Tổng Quát', floor: 'Tầng 3', capacity: 6, currentWaiting: 1, currentServing: 1, avgServiceMinutes: 30, avgWaitMinutes: 15, loadLevel: 'NORMAL', status: 'ACTIVE', utilizationRate: 33 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:111: // ===== VISITS (active today) =====
+D:\4.2\Final Project\final project\src\data\mockData.ts:112: export const MOCK_VISITS: Visit[] = [
+D:\4.2\Final Project\final project\src\data\mockData.ts:113:   { id: 'v1', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'A001', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau đầu, chóng mặt', doctorId: 'd1', roomId: 'r1', checkInTime: '07:45:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:114:   { id: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', ticketNumber: 'P001', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'PRIORITY', priorityReason: 'PREGNANT', priorityScore: 90, chiefComplaint: 'Khám thai định kỳ', provisionalDiagnosis: 'Thai 28 tuần', doctorId: 'd7', roomId: 'r7', checkInTime: '07:30:00', clsOrders: ['cls1', 'cls2'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:115:   { id: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', ticketNumber: 'P002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'ELDERLY_75PLUS', priorityScore: 85, chiefComplaint: 'Tức ngực, khó thở', doctorId: 'd2', roomId: 'r2', checkInTime: '08:00:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:116:   { id: 'v4', patientId: 'p4', patientName: 'Phạm Thị Dung', ticketNumber: 'P003', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'PRIORITY', priorityReason: 'CHILD_UNDER_6', priorityScore: 95, chiefComplaint: 'Sốt cao, ho', doctorId: 'd3', roomId: 'r3', checkInTime: '07:55:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:117:   { id: 'v5', patientId: 'p5', patientName: 'Hoàng Minh Đức', ticketNumber: 'A002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'APPOINTMENT', priorityScore: 60, chiefComplaint: 'Khám kiểm tra sức khỏe', doctorId: 'd1', roomId: 'r1', checkInTime: '08:05:00', appointmentId: 'apt1' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:118:   { id: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', ticketNumber: 'P004', visitDate: '2026-05-31', status: 'WAITING_CONCLUSION', lane: 'PRIORITY', priorityReason: 'VETERAN', priorityScore: 88, chiefComplaint: 'Đau khớp gối', provisionalDiagnosis: 'Nghi viêm khớp', doctorId: 'd8', roomId: 'r8', checkInTime: '07:40:00', clsOrders: ['cls3'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:119:   { id: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', ticketNumber: 'N001', visitDate: '2026-05-31', status: 'IN_CLS', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau bụng vùng thượng vị', provisionalDiagnosis: 'Nghi đau dạ dày', doctorId: 'd1', roomId: 'r1', checkInTime: '08:10:00', clsOrders: ['cls4', 'cls5'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:120:   { id: 'v8', patientId: 'p8', patientName: 'Đặng Thị Kim', ticketNumber: 'N002', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Mỏi mắt, nhức đầu', roomId: 'r4', checkInTime: '08:20:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:121:   { id: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', ticketNumber: 'N003', visitDate: '2026-05-31', status: 'WAITING_PAYMENT', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau họng, sốt nhẹ', finalDiagnosis: 'Viêm họng cấp', conclusion: 'Kê đơn thuốc 5 ngày', doctorId: 'd5', roomId: 'r5', checkInTime: '07:50:00', totalAmount: 270000 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:122:   { id: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', ticketNumber: 'P005', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'PRIORITY', priorityReason: 'DISABLED', priorityScore: 87, chiefComplaint: 'Đau lưng mãn tính', provisionalDiagnosis: 'Đau thắt lưng', doctorId: 'd8', roomId: 'r8', checkInTime: '08:15:00', clsOrders: ['cls6'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:123:   { id: 'v11', patientId: 'p11', patientName: 'Trương Văn Nam', ticketNumber: 'N004', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Ho kéo dài 2 tuần', roomId: 'r1', checkInTime: '08:25:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:124:   { id: 'v12', patientId: 'p12', patientName: 'Võ Thị Oanh', ticketNumber: 'N005', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Nổi mẩn da, ngứa', roomId: 'r6', checkInTime: '08:30:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:125:   { id: 'v13', patientId: 'p13', patientName: 'Đỗ Minh Phúc', ticketNumber: 'A003', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'APPOINTMENT', priorityScore: 60, chiefComplaint: 'Theo dõi huyết áp', doctorId: 'd4', roomId: 'r4', checkInTime: '08:00:00', appointmentId: 'apt2' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:126:   { id: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', ticketNumber: 'N006', visitDate: '2026-05-31', status: 'WAITING_CLS', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau bụng dưới', doctorId: 'd7', roomId: 'r7', checkInTime: '08:35:00', clsOrders: ['cls7'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:127:   { id: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', ticketNumber: 'P006', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'CHILD_UNDER_6', priorityScore: 95, chiefComplaint: 'Tiêu chảy, nôn ói', roomId: 'r3', checkInTime: '08:40:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:128:   { id: 'v16', patientId: 'p16', patientName: 'Lưu Thị Thảo', ticketNumber: 'N007', visitDate: '2026-05-31', status: 'COMPLETED', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Tái khám sau điều trị', finalDiagnosis: 'Viêm phế quản - khỏi', doctorId: 'd1', roomId: 'r1', checkInTime: '07:00:00', completionTime: '08:15:00', totalAmount: 380000 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:129:   { id: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', ticketNumber: 'N008', visitDate: '2026-05-31', status: 'WAITING_RESULT', lane: 'AFTER_CLS', priorityScore: 50, chiefComplaint: 'Chóng mặt, buồn nôn', doctorId: 'd2', roomId: 'r2', checkInTime: '08:00:00', clsOrders: ['cls8', 'cls9'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:130:   { id: 'v18', patientId: 'p18', patientName: 'Cao Thị Uyên', ticketNumber: 'P007', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'PRIORITY', priorityReason: 'ELDERLY_75PLUS', priorityScore: 85, chiefComplaint: 'Đau đầu gối, đi lại khó', roomId: 'r2', checkInTime: '08:45:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:131:   { id: 'v19', patientId: 'p19', patientName: 'Đinh Quang Vinh', ticketNumber: 'N009', visitDate: '2026-05-31', status: 'WAITING_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau dạ dày', roomId: 'r4', checkInTime: '08:50:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:132:   { id: 'v20', patientId: 'p20', patientName: 'Trịnh Thị Xuân', ticketNumber: 'P008', visitDate: '2026-05-31', status: 'IN_EXAM', lane: 'PRIORITY', priorityReason: 'EMERGENCY', priorityScore: 100, chiefComplaint: 'Đau bụng dữ dội, huyết áp thấp', doctorId: 'd7', roomId: 'r7', checkInTime: '09:00:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:133:   { id: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', ticketNumber: 'N010', visitDate: '2026-05-31', status: 'WAITING_CONCLUSION', lane: 'AFTER_CLS', priorityScore: 65, chiefComplaint: 'Đau đầu, chóng mặt kéo dài 2 tuần', provisionalDiagnosis: 'Nghi tăng huyết áp, theo dõi rối loạn tiền đình', doctorId: 'd1', roomId: 'r1', checkInTime: '07:30:00', clsOrders: ['cls10'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:134:   { id: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'N011', visitDate: '2026-04-18', status: 'COMPLETED', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Tái khám huyết áp', provisionalDiagnosis: 'Tăng huyết áp độ 1', finalDiagnosis: 'Tăng huyết áp độ 1', conclusion: 'Ổn định, tiếp tục theo dõi', treatmentPlan: 'Uống thuốc đều, tái khám sau 1 tháng', doctorId: 'd1', roomId: 'r1', checkInTime: '08:00:00', completionTime: '09:05:00', clsOrders: ['cls11'] },
+D:\4.2\Final Project\final project\src\data\mockData.ts:135:   { id: 'v23', patientId: 'p1', patientName: 'Nguyễn Văn An', ticketNumber: 'N012', visitDate: '2026-06-10', status: 'IN_EXAM', lane: 'NORMAL', priorityScore: 50, chiefComplaint: 'Đau đầu lại', provisionalDiagnosis: 'Theo dõi tăng huyết áp', doctorId: 'd1', roomId: 'r1', checkInTime: '08:45:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:138: // ===== QUEUE ITEMS =====
+D:\4.2\Final Project\final project\src\data\mockData.ts:139: export const MOCK_QUEUE_ITEMS: QueueItem[] = [
+D:\4.2\Final Project\final project\src\data\mockData.ts:140:   { id: 'q1', visitId: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', patientAge: 79, patientGender: 'MALE', ticketNumber: 'P002', lane: 'PRIORITY', priorityScore: 85, priorityReason: 'ELDERLY_75PLUS', status: 'WAITING_EXAM', targetRoomId: 'r2', targetDoctorId: 'd2', queuedAt: '08:00:00', estimatedWaitMinutes: 18, chiefComplaint: 'Tức ngực, khó thở' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:141:   { id: 'q2', visitId: 'v5', patientId: 'p5', patientName: 'Hoàng Minh Đức', patientAge: 46, patientGender: 'MALE', ticketNumber: 'A002', lane: 'APPOINTMENT', priorityScore: 60, status: 'WAITING_EXAM', targetRoomId: 'r1', targetDoctorId: 'd1', queuedAt: '08:05:00', estimatedWaitMinutes: 35, chiefComplaint: 'Khám kiểm tra sức khỏe', mustReturnToDoctor: true },
+D:\4.2\Final Project\final project\src\data\mockData.ts:142:   { id: 'q3', visitId: 'v8', patientId: 'p8', patientName: 'Đặng Thị Kim', patientAge: 69, patientGender: 'FEMALE', ticketNumber: 'N002', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r4', queuedAt: '08:20:00', estimatedWaitMinutes: 28, chiefComplaint: 'Mỏi mắt, nhức đầu' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:143:   { id: 'q4', visitId: 'v11', patientId: 'p11', patientName: 'Trương Văn Nam', patientAge: 52, patientGender: 'MALE', ticketNumber: 'N004', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r1', queuedAt: '08:25:00', estimatedWaitMinutes: 45, chiefComplaint: 'Ho kéo dài 2 tuần' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:144:   { id: 'q5', visitId: 'v12', patientId: 'p12', patientName: 'Võ Thị Oanh', patientAge: 29, patientGender: 'FEMALE', ticketNumber: 'N005', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r6', queuedAt: '08:30:00', estimatedWaitMinutes: 12, chiefComplaint: 'Nổi mẩn da, ngứa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:145:   { id: 'q6', visitId: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', patientAge: 3, patientGender: 'MALE', ticketNumber: 'P006', lane: 'PRIORITY', priorityScore: 95, priorityReason: 'CHILD_UNDER_6', status: 'WAITING_EXAM', targetRoomId: 'r3', queuedAt: '08:40:00', estimatedWaitMinutes: 20, chiefComplaint: 'Tiêu chảy, nôn ói' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:146:   { id: 'q7', visitId: 'v18', patientId: 'p18', patientName: 'Cao Thị Uyên', patientAge: 76, patientGender: 'FEMALE', ticketNumber: 'P007', lane: 'PRIORITY', priorityScore: 85, priorityReason: 'ELDERLY_75PLUS', status: 'WAITING_EXAM', targetRoomId: 'r2', queuedAt: '08:45:00', estimatedWaitMinutes: 22, chiefComplaint: 'Đau đầu gối, đi lại khó' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:147:   { id: 'q8', visitId: 'v19', patientId: 'p19', patientName: 'Đinh Quang Vinh', patientAge: 26, patientGender: 'MALE', ticketNumber: 'N009', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_EXAM', targetRoomId: 'r4', queuedAt: '08:50:00', estimatedWaitMinutes: 42, chiefComplaint: 'Đau dạ dày' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:148:   { id: 'q9', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', patientAge: 34, patientGender: 'FEMALE', ticketNumber: 'P001', lane: 'PRIORITY', priorityScore: 90, priorityReason: 'PREGNANT', status: 'WAITING_CLS', targetRoomId: 'r11', queuedAt: '08:10:00', estimatedWaitMinutes: 45, chiefComplaint: 'Khám thai 28 tuần' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:149:   { id: 'q10', visitId: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', patientAge: 36, patientGender: 'FEMALE', ticketNumber: 'P005', lane: 'PRIORITY', priorityScore: 87, priorityReason: 'DISABLED', status: 'WAITING_CLS', targetRoomId: 'r12', queuedAt: '08:30:00', estimatedWaitMinutes: 20, chiefComplaint: 'Đau lưng mãn tính' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:150:   { id: 'q11', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', patientAge: 42, patientGender: 'FEMALE', ticketNumber: 'N006', lane: 'NORMAL', priorityScore: 50, status: 'WAITING_CLS', targetRoomId: 'r11', queuedAt: '08:50:00', estimatedWaitMinutes: 70, chiefComplaint: 'Đau bụng dưới' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:151:   { id: 'q12', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', patientAge: 49, patientGender: 'MALE', ticketNumber: 'N008', lane: 'AFTER_CLS', priorityScore: 55, status: 'WAITING_RESULT', targetRoomId: 'r2', queuedAt: '08:45:00', estimatedWaitMinutes: 30, chiefComplaint: 'Chóng mặt, buồn nôn', mustReturnToDoctor: true },
+D:\4.2\Final Project\final project\src\data\mockData.ts:152:   { id: 'q13', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', patientAge: 59, patientGender: 'FEMALE', ticketNumber: 'P004', lane: 'AFTER_CLS', priorityScore: 88, priorityReason: 'VETERAN', status: 'WAITING_CONCLUSION', targetRoomId: 'r8', queuedAt: '08:30:00', estimatedWaitMinutes: 15, chiefComplaint: 'Đau khớp gối', mustReturnToDoctor: true },
+D:\4.2\Final Project\final project\src\data\mockData.ts:153:   { id: 'q14', visitId: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', patientAge: 44, patientGender: 'MALE', ticketNumber: 'N010', lane: 'AFTER_CLS', priorityScore: 65, status: 'WAITING_CONCLUSION', targetRoomId: 'r1', targetDoctorId: 'd1', queuedAt: '07:30:00', estimatedWaitMinutes: 10, chiefComplaint: 'Đau đầu, chóng mặt kéo dài', mustReturnToDoctor: true },
+D:\4.2\Final Project\final project\src\data\mockData.ts:154:   { id: 'q15', visitId: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', patientAge: 39, patientGender: 'MALE', ticketNumber: 'N011', lane: 'NORMAL', priorityScore: 50, status: 'COMPLETED', targetRoomId: 'r1', queuedAt: '08:00:00', estimatedWaitMinutes: 0, chiefComplaint: 'Tái khám huyết áp' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:155:   { id: 'q16', visitId: 'v23', patientId: 'p1', patientName: 'Nguyễn Văn An', patientAge: 39, patientGender: 'MALE', ticketNumber: 'N012', lane: 'NORMAL', priorityScore: 50, status: 'IN_EXAM', targetRoomId: 'r1', queuedAt: '08:45:00', estimatedWaitMinutes: 20, chiefComplaint: 'Đau đầu lại' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:160:   { id: 'cls1', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd7', orderedAt: '08:05:00', clinicalNote: 'Siêu âm kiểm tra thai nhi 28 tuần' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:161:   { id: 'cls2', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd7', orderedAt: '08:05:00', completedAt: '08:40:00', resultId: 'res1' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:162:   { id: 'cls3', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', serviceId: 's15', serviceName: 'X-Quang Cột Sống', roomId: 'r12', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd8', orderedAt: '07:55:00', completedAt: '08:25:00', resultId: 'res2' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:163:   { id: 'cls4', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'IN_PROGRESS', orderedBy: 'd1', orderedAt: '08:20:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:164:   { id: 'cls5', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd1', orderedAt: '08:20:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:165:   { id: 'cls6', visitId: 'v10', patientId: 'p10', patientName: 'Lý Thị Mai', serviceId: 's15', serviceName: 'X-Quang Cột Sống', roomId: 'r12', priority: 'ROUTINE', status: 'PENDING', orderedBy: 'd8', orderedAt: '08:30:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:166:   { id: 'cls7', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', serviceId: 's12', serviceName: 'Siêu Âm Ổ Bụng', roomId: 'r11', priority: 'URGENT', status: 'ASSIGNED', orderedBy: 'd7', orderedAt: '08:40:00', clinicalNote: 'Đau bụng dưới cần loại trừ viêm ruột thừa' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:167:   { id: 'cls8', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', serviceId: 's16', serviceName: 'Điện Tim 12 Chuyển Đạo', roomId: 'r13', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd2', orderedAt: '08:10:00', completedAt: '08:35:00', resultId: 'res3' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:168:   { id: 'cls9', visitId: 'v17', patientId: 'p17', patientName: 'Mai Văn Tuấn', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd2', orderedAt: '08:10:00', completedAt: '08:40:00', resultId: 'res4' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:169:   { id: 'cls10', visitId: 'v21', patientId: 'p21', patientName: 'Lâm Thanh Phong', serviceId: 's16', serviceName: 'Điện Tim 12 Chuyển Đạo', roomId: 'r13', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd1', orderedAt: '08:00:00', completedAt: '08:50:00', resultId: 'res5', clinicalNote: 'Đau đầu, chóng mặt - kiểm tra bất thường nhịp tim' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:170:   { id: 'cls11', visitId: 'v22', patientId: 'p1', patientName: 'Nguyễn Văn An', serviceId: 's8', serviceName: 'Xét Nghiệm Máu Tổng Quát', roomId: 'r9', priority: 'ROUTINE', status: 'COMPLETED', orderedBy: 'd1', orderedAt: '08:10:00', completedAt: '08:35:00', resultId: 'res6', clinicalNote: 'Theo dõi huyết áp, kiểm tra công thức máu' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:175:   { id: 'res1', orderId: 'cls2', visitId: 'v2', result: 'Huyết đồ: BC 8.5 K/uL, HC 3.8 M/uL, Hb 11.2 g/dL, Hct 33.5%, TC 185 K/uL. Nhận xét: Thiếu máu nhẹ do thiếu sắt', isAbnormal: true, performedBy: 'ktvxn', performedAt: '08:40:00', note: 'Cần bổ sung sắt theo chỉ định bác sĩ' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:176:   { id: 'res2', orderId: 'cls3', visitId: 'v6', result: 'X-Quang cột sống thắt lưng thẳng nghiêng: Hẹp khe liên đốt L4-L5, L5-S1. Mỏ xương nhỏ ở bờ trước thân đốt sống. Kết luận: Thoái hóa cột sống thắt lưng độ II', isAbnormal: true, performedBy: 'u7', performedAt: '08:25:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:177:   { id: 'res3', orderId: 'cls8', visitId: 'v17', result: 'Điện tim bình thường. Nhịp xoang đều, tần số 78 l/p. Trục điện tim bình thường. Không có ST chênh, không rối loạn nhịp', isAbnormal: false, performedBy: 'u7', performedAt: '08:35:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:178:   { id: 'res4', orderId: 'cls9', visitId: 'v17', result: 'Công thức máu trong giới hạn bình thường. BC 7.2, HC 4.5, Hb 14.3, TC 220. Lưu ý: Cholesterol toàn phần 5.8 mmol/L (cao giới hạn)', isAbnormal: false, performedBy: 'u7', performedAt: '08:40:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:179:   { id: 'res5', orderId: 'cls10', visitId: 'v21', result: 'Điện tim 12 chuyển đạo: Nhịp xoang đều, tần số 92 l/p. Trục lệch trái nhẹ. ST chênh lên nhẹ ở V1-V2. Biên độ R ở V5-V6 tăng cao. Kết luận: Nghi dày thất trái - cần theo dõi và kết luận lâm sàng.', isAbnormal: true, performedBy: 'u7', performedAt: '08:50:00', note: 'Khuyến nghị tham khảo chuyên khoa tim mạch nếu cần' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:180:   { id: 'res6', orderId: 'cls11', visitId: 'v22', result: 'Huyết đồ trong giới hạn cho phép. BC 6.9 K/uL, HC 4.4 M/uL, Hb 13.6 g/dL, Hct 41.2%, TC 210 K/uL.', isAbnormal: false, performedBy: 'u7', performedAt: '08:35:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:183: // ===== APPOINTMENTS =====
+D:\4.2\Final Project\final project\src\data\mockData.ts:184: export const MOCK_APPOINTMENTS: Appointment[] = [
+D:\4.2\Final Project\final project\src\data\mockData.ts:185:   { id: 'apt1', patientId: 'p5', patientName: 'Hoàng Minh Đức', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:186:   { id: 'apt2', patientId: 'p13', patientName: 'Đỗ Minh Phúc', doctorId: 'd4', roomId: 'r4', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:187:   { id: 'apt3', patientId: 'p16', patientName: 'Lưu Thị Thảo', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '07:00', status: 'CHECKED_IN' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:188:   { id: 'apt4', patientId: 'p9', patientName: 'Bùi Quốc Long', doctorId: 'd5', roomId: 'r5', serviceId: 's4', scheduledDate: '2026-05-31', scheduledTime: '07:30', status: 'CHECKED_IN' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:189:   { id: 'apt5', patientId: 'p11', patientName: 'Trương Văn Nam', doctorId: 'd1', roomId: 'r1', serviceId: 's1', scheduledDate: '2026-05-31', scheduledTime: '09:00', status: 'SCHEDULED' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:190:   { id: 'apt6', patientId: 'p17', patientName: 'Mai Văn Tuấn', doctorId: 'd2', roomId: 'r2', serviceId: 's2', scheduledDate: '2026-05-31', scheduledTime: '08:00', status: 'CHECKED_IN' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:193: // ===== STATUS HISTORY =====
+D:\4.2\Final Project\final project\src\data\mockData.ts:194: export const MOCK_STATUS_HISTORY: StatusHistoryEntry[] = [
+D:\4.2\Final Project\final project\src\data\mockData.ts:195:   { id: 'sh1', visitId: 'v1', toStatus: 'WAITING_EXAM', timestamp: '07:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:196:   { id: 'sh2', visitId: 'v1', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:30:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:197:   { id: 'sh3', visitId: 'v2', toStatus: 'WAITING_EXAM', timestamp: '07:30:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:198:   { id: 'sh4', visitId: 'v2', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:00:00', performedBy: 'u7', performedByName: 'BS. Hồ Thị Nga' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:199:   { id: 'sh5', visitId: 'v2', fromStatus: 'IN_EXAM', toStatus: 'WAITING_CLS', timestamp: '08:10:00', performedBy: 'u7', performedByName: 'BS. Hồ Thị Nga' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:200:   { id: 'sh6', visitId: 'v16', toStatus: 'WAITING_EXAM', timestamp: '07:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:201:   { id: 'sh7', visitId: 'v16', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '07:15:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:202:   { id: 'sh8', visitId: 'v16', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '07:55:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:203:   { id: 'sh9', visitId: 'v16', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '08:15:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:204:   { id: 'sh10', visitId: 'v9', toStatus: 'WAITING_EXAM', timestamp: '07:50:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:205:   { id: 'sh11', visitId: 'v9', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:10:00', performedBy: 'u5', performedByName: 'BS. Vũ Thị Lan' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:206:   { id: 'sh12', visitId: 'v9', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '08:45:00', performedBy: 'u5', performedByName: 'BS. Vũ Thị Lan' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:207:   { id: 'sh13', visitId: 'v22', toStatus: 'WAITING_EXAM', timestamp: '08:00:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:208:   { id: 'sh14', visitId: 'v22', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '08:15:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:209:   { id: 'sh15', visitId: 'v22', fromStatus: 'IN_EXAM', toStatus: 'WAITING_PAYMENT', timestamp: '08:40:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:210:   { id: 'sh16', visitId: 'v22', fromStatus: 'WAITING_PAYMENT', toStatus: 'COMPLETED', timestamp: '09:05:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:211:   { id: 'sh17', visitId: 'v23', toStatus: 'WAITING_EXAM', timestamp: '08:45:00', performedBy: 'u2', performedByName: 'Trần Thị Lễ Tân' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:212:   { id: 'sh18', visitId: 'v23', fromStatus: 'WAITING_EXAM', toStatus: 'IN_EXAM', timestamp: '09:00:00', performedBy: 'u4', performedByName: 'BS. Phạm Hoài Nam' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:217:   { id: 'dh1', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', fromRoomId: 'r7', toRoomId: 'r11', toRoomName: 'Phòng Siêu Âm', followedSuggestion: true, reason: 'Chỉ định siêu âm thai', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '08:10:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:218:   { id: 'dh2', visitId: 'v6', patientId: 'p6', patientName: 'Nguyễn Thị Hoa', fromRoomId: 'r8', toRoomId: 'r12', toRoomName: 'Phòng X-Quang', followedSuggestion: true, reason: 'Chỉ định X-Quang cột sống', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '07:55:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:219:   { id: 'dh3', visitId: 'v7', patientId: 'p7', patientName: 'Vũ Văn Hùng', fromRoomId: 'r1', toRoomId: 'r9', toRoomName: 'Phòng Xét Nghiệm', followedSuggestion: false, reason: 'Chỉ định XN máu, chuyển tay vì BN muốn XN nhanh', dispatchedBy: 'u3', dispatchedByName: 'Lê Văn Điều Phối', dispatchedAt: '08:20:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:220:   { id: 'dh4', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', fromRoomId: undefined, toRoomId: 'r5', toRoomName: 'Phòng Khám 201', followedSuggestion: true, reason: 'BN đặt lịch khám TMH', dispatchedBy: 'u2', dispatchedByName: 'Trần Thị Lễ Tân', dispatchedAt: '07:50:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:225:   { id: 'inv1', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', items: [{ serviceId: 's4', serviceName: 'Khám Tai Mũi Họng', quantity: 1, unitPrice: 150000, totalPrice: 150000 }, { serviceId: 's8', serviceName: 'Xét Nghiệm Máu', quantity: 1, unitPrice: 180000, totalPrice: 180000 }], totalAmount: 330000, paidAmount: 0, status: 'PENDING', createdAt: '08:45:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:226:   { id: 'inv2', visitId: 'v16', patientId: 'p16', patientName: 'Lưu Thị Thảo', items: [{ serviceId: 's1', serviceName: 'Khám Nội Tổng Quát', quantity: 1, unitPrice: 150000, totalPrice: 150000 }, { serviceId: 's14', serviceName: 'X-Quang Ngực', quantity: 1, unitPrice: 150000, totalPrice: 150000 }], totalAmount: 300000, paidAmount: 300000, status: 'PAID', createdAt: '07:55:00', paidAt: '08:15:00' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:244:   totalPatientsToday: 47,
+D:\4.2\Final Project\final project\src\data\mockData.ts:276:   { dept: 'Nội TQ', patients: 18, avgWait: 42 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:277:   { dept: 'Tim Mạch', patients: 8, avgWait: 20 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:278:   { dept: 'Nhi Khoa', patients: 14, avgWait: 65 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:279:   { dept: 'SPK', patients: 10, avgWait: 58 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:280:   { dept: 'CLS', patients: 32, avgWait: 35 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:281:   { dept: 'TMH', patients: 6, avgWait: 15 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:282:   { dept: 'Da Liễu', patients: 4, avgWait: 12 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:283:   { dept: 'Xương Khớp', patients: 7, avgWait: 24 },
+D:\4.2\Final Project\final project\src\data\mockData.ts:288:   { id: 'al1', actionType: 'CALL_PATIENT', visitId: 'v3', patientId: 'p3', patientName: 'Lê Văn Cường', fromStatus: 'WAITING_EXAM', createdAt: '08:02:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:289:   { id: 'al2', actionType: 'TRANSFER_ROOM', visitId: 'v2', patientId: 'p2', patientName: 'Trần Thị Bình', fromRoomId: 'r7', toRoomId: 'r11', reason: 'Chỉ định siêu âm thai', createdAt: '08:10:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:290:   { id: 'al3', actionType: 'ACCEPT_REALLOCATION', visitId: 'v14', patientId: 'p14', patientName: 'Hồ Thị Quỳnh', fromRoomId: 'r11', toRoomId: 'r11', reason: 'Gợi ý hệ thống - giảm tải phòng siêu âm', createdAt: '08:52:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:291:   { id: 'al4', actionType: 'CALL_PATIENT', visitId: 'v15', patientId: 'p15', patientName: 'Phan Văn Sơn', fromStatus: 'WAITING_EXAM', createdAt: '08:42:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },
+D:\4.2\Final Project\final project\src\data\mockData.ts:292:   { id: 'al5', actionType: 'DISMISS_REALLOCATION', visitId: 'v9', patientId: 'p9', patientName: 'Bùi Quốc Long', reason: 'Bệnh nhân không đồng ý chuyển phòng', createdAt: '08:35:00', createdBy: 'u3', createdByName: 'Lê Văn Điều Phối' },

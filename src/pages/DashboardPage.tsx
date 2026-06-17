@@ -1,184 +1,295 @@
-import { useState } from 'react';
-import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend
-} from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/layout/Layout';
-import DashboardCards from '../components/dashboard/DashboardCards';
-import RoomLoadMonitor from '../components/dashboard/RoomLoadMonitor';
-import { useHospital } from '../context/HospitalContext';
-import { PATIENT_FLOW_CHART_DATA, WAIT_TIME_CHART_DATA, DEPARTMENT_STATS } from '../data/mockData';
-import { ArrowRightLeft, Clock } from 'lucide-react';
+import { dashboardApi } from '../services/dashboardApi';
+import { roomApi } from '../services/roomApi';
+import { visitApi } from '../services/visitApi';
+import { queueApi } from '../services/queueApi';
+import type {
+  DashboardOverviewDto,
+  RoomDto,
+  VisitListItemDto,
+  QueueItemSummaryDto,
+} from '../services/backend-types';
+import { ErrorState, LoadingState } from '../components/common/PageState';
+import { AlertTriangle, ArrowRightLeft, Clock, Users } from 'lucide-react';
+import { LoadBadge } from '../components/ui/PriorityBadge';
+import StatusBadge from '../components/ui/StatusBadge';
+import { formatDateTime } from '../lib/format';
+
+type RoomMetric = RoomDto & {
+  currentWaiting: number;
+  utilizationRate: number;
+  avgWaitMinutes: number;
+  loadLevel: 'NORMAL' | 'WARNING' | 'OVERLOAD';
+};
+
+function StatCard({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className={`mt-2 text-3xl font-black ${accent}`}>{value}</p>
+      <p className="mt-1 text-xs text-gray-400">{sub}</p>
+    </div>
+  );
+}
+
+function RoomRow({ room }: { room: RoomMetric }) {
+  const pct = Math.min(100, room.utilizationRate);
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{room.name}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {room.department.name} · {room.code}
+          </p>
+        </div>
+        <LoadBadge level={room.loadLevel} />
+      </div>
+      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+        <span className="flex items-center gap-1">
+          <Users size={11} /> {room.currentWaiting} đang chờ
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock size={11} /> ~{room.avgWaitMinutes} phút
+        </span>
+      </div>
+      <div className="mt-3 h-1.5 rounded-full bg-gray-100">
+        <div
+          className={`h-1.5 rounded-full ${
+            room.loadLevel === 'OVERLOAD'
+              ? 'bg-red-500'
+              : room.loadLevel === 'WARNING'
+                ? 'bg-amber-500'
+                : 'bg-emerald-500'
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400">
+        <span>Sức chứa: {room.capacity ?? 'N/A'}</span>
+        <span>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+function VisitRow({ visit }: { visit: VisitListItemDto }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs font-black text-sky-700">{visit.queueNumber}</span>
+            <StatusBadge status={visit.currentState as never} size="sm" />
+          </div>
+          <p className="mt-2 text-sm font-semibold text-gray-800">{visit.patient.fullName}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {visit.patient.patientCode} · {visit.patient.age} tuổi · {visit.patient.phone}
+          </p>
+        </div>
+        <span className="text-xs text-gray-400">{formatDateTime(visit.createdAt)}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 sm:grid-cols-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-gray-400">Khoa</p>
+          <p className="mt-1 text-gray-700">{visit.department?.name ?? 'Chưa có'}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-gray-400">Phòng</p>
+          <p className="mt-1 text-gray-700">{visit.room?.name ?? 'Chưa có'}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-gray-400">Bác sĩ</p>
+          <p className="mt-1 text-gray-700">{visit.doctor?.name ?? 'Chưa có'}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-gray-400">Ưu tiên</p>
+          <p className="mt-1 text-gray-700">{visit.priorityReason ?? 'Bình thường'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
-  const { dashboardStats, rooms, visits, dispatchHistory } = useHospital();
-  const [activeTab, setActiveTab] = useState<'flow' | 'wait' | 'dept'>('flow');
+  const [overview, setOverview] = useState<DashboardOverviewDto | null>(null);
+  const [rooms, setRooms] = useState<RoomDto[]>([]);
+  const [visits, setVisits] = useState<VisitListItemDto[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItemSummaryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const recentDispatches = [...dispatchHistory].reverse().slice(0, 5);
-  const activeVisits = visits.filter(v => !['COMPLETED', 'CANCELLED'].includes(v.status));
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const [overviewRes, roomsRes, visitsRes, queueRes] = await Promise.all([
+          dashboardApi.getOverview(),
+          roomApi.list({ limit: 50, page: 1 }),
+          visitApi.list({ limit: 20, page: 1, sort: 'desc' }),
+          queueApi.list({ limit: 50, page: 1, sort: 'desc' }),
+        ]);
+
+        if (!active) return;
+
+        setOverview(overviewRes.data);
+        setRooms(roomsRes.data);
+        setVisits(visitsRes.data);
+        setQueueItems(queueRes.data);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Không tải được dashboard.');
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const roomMetrics = useMemo<RoomMetric[]>(() => {
+    return rooms
+      .map(room => {
+        const related = queueItems.filter(item => item.room?.id === room.id);
+        const currentWaiting = related.filter(item =>
+          ['WAITING', 'CALLED', 'SERVING'].includes(item.status.currentStatus),
+        ).length;
+        const avgWait =
+          related.length > 0
+            ? Math.round(
+                related.reduce((sum, item) => sum + item.waitingTimeMinutes, 0) / related.length,
+              )
+            : 0;
+        const utilizationRate = room.capacity ? Math.round((currentWaiting / room.capacity) * 100) : 0;
+        const loadLevel: RoomMetric['loadLevel'] =
+          utilizationRate >= 100 ? 'OVERLOAD' : utilizationRate >= 70 ? 'WARNING' : 'NORMAL';
+
+        return {
+          ...room,
+          currentWaiting,
+          utilizationRate,
+          avgWaitMinutes: avgWait,
+          loadLevel,
+        };
+      })
+      .sort((a, b) => b.currentWaiting - a.currentWaiting);
+  }, [queueItems, rooms]);
+
+  const recentVisits = useMemo(() => {
+    return [...visits].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+  }, [visits]);
+
+  if (loading) {
+    return (
+      <Layout pageTitle="Tổng Quan">
+        <LoadingState label="Đang tải dashboard thật từ backend..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout pageTitle="Tổng Quan">
+        <ErrorState message={error} onRetry={() => window.location.reload()} />
+      </Layout>
+    );
+  }
 
   return (
     <Layout pageTitle="Tổng Quan">
       <div className="space-y-5">
-        {/* Stats cards */}
-        <DashboardCards stats={dashboardStats} />
+        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <StatCard label="Tổng bệnh nhân" value={overview?.totalPatients ?? 0} sub="Từ backend thật" accent="text-sky-600" />
+          <StatCard label="Tổng bác sĩ" value={overview?.totalDoctors ?? 0} sub="Đang hoạt động" accent="text-indigo-600" />
+          <StatCard label="Tổng lượt khám" value={overview?.totalVisits ?? 0} sub="Dữ liệu demo" accent="text-purple-600" />
+          <StatCard label="Đang chờ" value={overview?.waitingPatients ?? 0} sub="Chưa hoàn tất" accent="text-amber-600" />
+          <StatCard label="Hàng đợi" value={overview?.activeQueues ?? 0} sub="Queue item đang hoạt động" accent="text-emerald-600" />
+          <StatCard label="Hoàn tất" value={overview?.completedVisits ?? 0} sub="Đã đóng lượt" accent="text-red-600" />
+        </div>
 
-        {/* Main content grid */}
-        <div className="grid lg:grid-cols-3 gap-5">
-          {/* Charts - takes 2/3 */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Chart tabs */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-800">Biểu Đồ Theo Dõi</h3>
-                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                  {([['flow','Luồng BN'], ['wait','Thời Gian Chờ'], ['dept','Theo Khoa']] as const).map(([tab, label]) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-white text-sky-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Lượt khám gần đây</p>
+                  <p className="mt-1 text-xs text-gray-500">Danh sách lấy từ <code>/visits</code></p>
                 </div>
+                <ArrowRightLeft className="text-gray-400" size={18} />
               </div>
 
-              {activeTab === 'flow' && (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={PATIENT_FLOW_CHART_DATA}>
-                    <defs>
-                      <linearGradient id="colorCheckin" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="time" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Area type="monotone" dataKey="check_in" name="Check-in" stroke="#0ea5e9" fill="url(#colorCheckin)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="completed" name="Hoàn tất" stroke="#10b981" fill="url(#colorCompleted)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="waiting" name="Đang chờ" stroke="#f59e0b" fill="none" strokeDasharray="4 4" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-
-              {activeTab === 'wait' && (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={WAIT_TIME_CHART_DATA}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} unit=" ph" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="avg_wait" name="TG chờ TB (phút)" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="avg_service" name="TG khám TB (phút)" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-
-              {activeTab === 'dept' && (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={DEPARTMENT_STATS} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="dept" tick={{ fontSize: 11 }} width={55} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="patients" name="Số BN" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
-                    <Bar dataKey="avgWait" name="Chờ TB (ph)" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            {/* Active visits summary */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-800">Bệnh Nhân Đang Hoạt Động ({activeVisits.length})</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">STT</th>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Bệnh Nhân</th>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Trạng Thái</th>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Check-in</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeVisits.slice(0, 8).map(visit => (
-                      <tr key={visit.id} className="border-t border-gray-50 hover:bg-gray-50/50">
-                        <td className="px-4 py-2.5">
-                          <span className="font-mono font-bold text-sky-700 text-xs">{visit.ticketNumber}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <p className="font-medium text-gray-800 text-xs">{visit.patientName}</p>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            visit.status === 'IN_EXAM' ? 'bg-indigo-100 text-indigo-700' :
-                            visit.status === 'WAITING_EXAM' ? 'bg-blue-100 text-blue-700' :
-                            visit.status === 'WAITING_CLS' ? 'bg-purple-100 text-purple-700' :
-                            visit.status === 'IN_CLS' ? 'bg-violet-100 text-violet-700' :
-                            visit.status === 'WAITING_CONCLUSION' ? 'bg-amber-100 text-amber-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {visit.status === 'WAITING_EXAM' ? 'Chờ khám' :
-                             visit.status === 'IN_EXAM' ? 'Đang khám' :
-                             visit.status === 'WAITING_CLS' ? 'Chờ CLS' :
-                             visit.status === 'IN_CLS' ? 'Đang CLS' :
-                             visit.status === 'WAITING_CONCLUSION' ? 'Chờ kết luận' :
-                             visit.status === 'WAITING_PAYMENT' ? 'Chờ TT' : visit.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-gray-500">{visit.checkInTime?.slice(0, 5)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-4 space-y-3">
+                {recentVisits.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
+                    Chưa có lượt khám nào.
+                  </div>
+                ) : (
+                  recentVisits.map(visit => <VisitRow key={visit.visitId} visit={visit} />)
+                )}
               </div>
             </div>
           </div>
 
-          {/* Right column - Room monitor + dispatch history */}
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Tải Phòng Hiện Tại</h3>
-              <RoomLoadMonitor rooms={rooms} />
+            <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Tải phòng hiện tại</p>
+                  <p className="mt-1 text-xs text-gray-500">Tính từ queue item thật</p>
+                </div>
+                <Users className="text-gray-400" size={18} />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {roomMetrics.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
+                    Chưa có dữ liệu phòng.
+                  </div>
+                ) : (
+                  roomMetrics.slice(0, 5).map(room => <RoomRow key={room.id} room={room} />)
+                )}
+              </div>
             </div>
 
-            {/* Recent dispatches */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <ArrowRightLeft size={14} className="text-gray-500" />
-                <h3 className="text-sm font-semibold text-gray-800">Điều Phối Gần Đây</h3>
+            <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="text-amber-500" size={18} />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Điểm cần chú ý</p>
+                  <p className="mt-1 text-xs text-gray-500">Bệnh nhân ưu tiên và phòng quá tải</p>
+                </div>
               </div>
-              <div className="divide-y divide-gray-50">
-                {recentDispatches.length === 0 && <p className="px-4 py-4 text-xs text-gray-400">Chưa có điều phối</p>}
-                {recentDispatches.map(d => (
-                  <div key={d.id} className="px-4 py-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-medium text-gray-800">{d.patientName}</p>
-                        <p className="text-xs text-gray-500">→ {d.toRoomName}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-xs text-gray-400">{d.dispatchedAt.slice(0, 5)}</span>
-                        {d.followedSuggestion && (
-                          <span className="text-xs text-green-600 font-medium">✓ Theo gợi ý</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl bg-amber-50 p-4">
+                  <p className="text-xs text-amber-700">Bệnh nhân chờ</p>
+                  <p className="mt-1 text-2xl font-black text-amber-700">{overview?.waitingPatients ?? 0}</p>
+                </div>
+                <div className="rounded-2xl bg-red-50 p-4">
+                  <p className="text-xs text-red-700">Phòng quá tải</p>
+                  <p className="mt-1 text-2xl font-black text-red-700">
+                    {roomMetrics.filter(room => room.loadLevel === 'OVERLOAD').length}
+                  </p>
+                </div>
               </div>
             </div>
           </div>

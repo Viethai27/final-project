@@ -13,18 +13,27 @@ import BookingCTA from "../../components/customer/homecontent/BookingCTA";
 
 const HomeCustomer: React.FC = () => {
   return (
-    <Box as="section" pt={{ base: 10, md: 16 }}>
+    <Box as="section" id="top" pt={{ base: 10, md: 16 }}>
       <Container maxW="7xl">
-        {/* Services section - đưa ra ngoài Stack để full width */}
-        <>
-          <Hero />
+        <Hero />
+        <Box id="services">
           <Services />
+        </Box>
+        <Box id="reasons">
           <Reasons />
+        </Box>
+        <Box id="departments">
           <Departments />
+        </Box>
+        <Box id="doctors">
           <Doctors />
+        </Box>
+        <Box id="testimonials">
           <Testimonials />
+        </Box>
+        <Box id="booking">
           <BookingCTA />
-        </>
+        </Box>
       </Container>
     </Box>
   );

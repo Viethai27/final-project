@@ -33,8 +33,8 @@ export default function Header({ onMenuClick, pageTitle }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const now = new Date();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
@@ -95,7 +95,7 @@ export default function Header({ onMenuClick, pageTitle }: HeaderProps) {
                     <p className="text-xs text-gray-500">{user.department}</p>
                   </div>
                   <button
-                    onClick={handleLogout}
+                    onClick={() => void handleLogout()}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
                     <LogOut size={15} />

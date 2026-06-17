@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.visitRouter = void 0;
+const express_1 = require("express");
+const visit_controller_1 = require("./visit.controller");
+const cls_controller_1 = require("../cls/cls.controller");
+const turn_controller_1 = require("../turn/turn.controller");
+exports.visitRouter = (0, express_1.Router)();
+exports.visitRouter.get('/', visit_controller_1.listVisits);
+exports.visitRouter.post('/walk-in', visit_controller_1.createWalkInVisitHandler);
+exports.visitRouter.get('/:visitId/turns', turn_controller_1.getVisitTurns);
+exports.visitRouter.get('/:visitId/cls-orders', cls_controller_1.getVisitClsOrders);
+exports.visitRouter.patch('/:id/conclusion', visit_controller_1.concludeVisitHandler);
+exports.visitRouter.get('/:id', visit_controller_1.getVisitDetail);

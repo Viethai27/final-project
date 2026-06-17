@@ -1,0 +1,66 @@
+{
+  "withSuggestion": {
+    "avgWaitTime": 52.8,
+    "maxWaitTime": 86.7,
+    "priorityAvgWait": 51.5,
+    "normalAvgWait": 53,
+    "overloadEvents": 103.1,
+    "throughput": 88,
+    "admittedPatients": 115,
+    "completedPatients": 88,
+    "unfinishedPatients": 27.1,
+    "rejectedOrDeferredPatients": 6.1,
+    "avgRoomUtilization": 0.995
+  },
+  "random": {
+    "avgWaitTime": 54.8,
+    "maxWaitTime": 87.9,
+    "priorityAvgWait": 53.8,
+    "normalAvgWait": 55,
+    "overloadEvents": 103.8,
+    "throughput": 87.2,
+    "admittedPatients": 114.1,
+    "completedPatients": 87.2,
+    "unfinishedPatients": 26.9,
+    "rejectedOrDeferredPatients": 7,
+    "avgRoomUtilization": 0.983
+  },
+  "comparison": {
+    "avgWaitTime": -3.6,
+    "maxWaitTime": -1.4,
+    "priorityAvgWait": -4.3,
+    "normalAvgWait": -3.6,
+    "overloadEvents": -0.7,
+    "throughput": 0.9,
+    "admittedPatients": 0.8,
+    "completedPatients": 0.9,
+    "unfinishedPatients": 0.7,
+    "rejectedOrDeferredPatients": -12.9,
+    "avgRoomUtilization": 1.2
+  },
+  "config": {
+    "totalMinutes": 240,
+    "numRooms": 3,
+    "roomCapacity": 12,
+    "avgServiceTime": 8,
+    "arrivalRates": {
+      "peak": {
+        "from": 0,
+        "to": 60,
+        "rate": 0.8
+      },
+      "normal": {
+        "from": 60,
+        "to": 150,
+        "rate": 0.5
+      },
+      "offpeak": {
+        "from": 150,
+        "to": 240,
+        "rate": 0.3
+      }
+    },
+    "priorityRatio": 0.15,
+    "numRuns": 100
+  }
+}

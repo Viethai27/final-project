@@ -78,7 +78,7 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
-  confirmVariant?: 'danger' | 'primary';
+  confirmVariant?: 'danger' | 'primary' | 'warning';
   loading?: boolean;
 }
 
@@ -99,7 +99,9 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, confirm
             disabled={loading}
             className={clsx(
               'px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-60',
-              confirmVariant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-sky-600 hover:bg-sky-700'
+              confirmVariant === 'danger' ? 'bg-red-600 hover:bg-red-700' :
+              confirmVariant === 'warning' ? 'bg-amber-500 hover:bg-amber-600' :
+              'bg-sky-600 hover:bg-sky-700'
             )}
           >
             {loading ? 'Đang xử lý...' : confirmLabel}
