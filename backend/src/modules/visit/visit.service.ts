@@ -1572,6 +1572,22 @@ export const concludeVisit = async (
   const now = new Date();
 
   await prisma.$transaction(async tx => {
+    const conclusionTurnProgress = await tx.turnProgress.findFirst({
+      where: {
+        status: 'IN_PROGRESS',
+        turn: {
+          visitId: id,
+          turnType: 'CONCLUSION',
+        },
+      },
+      select: {
+        id: true,
+        calledAt: true,
+        startedAt: true,
+        note: true,
+      },
+    });
+
     await tx.visitClinical.upsert({
       where: { visitId: id },
       create: {
@@ -1588,6 +1604,26 @@ export const concludeVisit = async (
         completedAt: now,
       },
     });
+
+    if (conclusionTurnProgress) {
+      await tx.turnProgress.update({
+        where: { id: conclusionTurnProgress.id },
+        data: {
+          status: 'COMPLETED',
+          endedAt: now,
+          durationMinutes: Math.max(
+            0,
+            Math.round(
+              (now.getTime() -
+                (conclusionTurnProgress.startedAt ?? conclusionTurnProgress.calledAt ?? now).getTime()) /
+                60000,
+            ),
+          ),
+          note: payload.note ?? conclusionTurnProgress.note ?? null,
+          updatedById: payload.updatedById ?? null,
+        },
+      });
+    }
 
     await tx.visitProgress.update({
       where: { visitId: id },
