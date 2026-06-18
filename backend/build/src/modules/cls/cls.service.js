@@ -381,7 +381,6 @@ const visitStateAfterStart = (status) => {
     }
     return null;
 };
-const visitStateAfterComplete = (_orderCount) => 'WAITING_RESULT';
 const getClsPriorityScore = (priority) => (priority === 'URGENT' ? 85 : 55);
 const getClsLane = (priority) => (priority === 'URGENT' ? 'PRIORITY' : 'NORMAL');
 const resolveClsRoom = async (tx, input) => {
@@ -685,7 +684,7 @@ const mutateOrder = async (id, action, payload) => {
         }
     }
     const now = new Date();
-    const nextState = action === 'start' ? visitStateAfterStart(order.visit.progress?.currentState) : visitStateAfterComplete(order.visit.clsOrders.length);
+    const nextState = action === 'start' ? visitStateAfterStart(order.visit.progress?.currentState) : null;
     await prisma_1.prisma.$transaction(async (tx) => {
         await tx.cLSOrder.update({
             where: { id },
@@ -769,6 +768,7 @@ const mutateOrder = async (id, action, payload) => {
                     },
                 },
             });
+            const currentState = order.visit.progress?.currentState ?? null;
             if (remainingOpenOrders === 0) {
                 await tx.visitProgress.update({
                     where: { visitId: order.visitId },
@@ -779,17 +779,19 @@ const mutateOrder = async (id, action, payload) => {
                         updatedById: payload.updatedById ?? order.visit.progress?.updatedById ?? null,
                     },
                 });
-                await tx.visitStateHistory.create({
-                    data: {
-                        visitId: order.visitId,
-                        fromState: 'WAITING_RESULT',
-                        toState: 'WAITING_CONCLUSION',
-                        triggerEvent: 'CLS_ALL_RESULTS_COMPLETED',
-                        triggeredById: payload.updatedById ?? null,
-                        transitionedAt: now,
-                        note: payload.note ?? 'All CLS orders completed.',
-                    },
-                });
+                if (currentState !== 'WAITING_CONCLUSION') {
+                    await tx.visitStateHistory.create({
+                        data: {
+                            visitId: order.visitId,
+                            fromState: currentState,
+                            toState: 'WAITING_CONCLUSION',
+                            triggerEvent: 'CLS_COMPLETE',
+                            triggeredById: payload.updatedById ?? null,
+                            transitionedAt: now,
+                            note: payload.note ?? 'All CLS orders completed.',
+                        },
+                    });
+                }
                 const existingConclusionQueue = await tx.queueItem.findFirst({
                     where: {
                         visitId: order.visitId,
@@ -870,6 +872,28 @@ const mutateOrder = async (id, action, payload) => {
                         },
                     });
                 }
+            }
+            else if (currentState !== 'WAITING_RESULT') {
+                await tx.visitProgress.update({
+                    where: { visitId: order.visitId },
+                    data: {
+                        currentState: 'WAITING_RESULT',
+                        laneType: order.visit.progress?.laneType ?? 'NORMAL',
+                        sameDoctorRequired: order.visit.progress?.sameDoctorRequired ?? false,
+                        updatedById: payload.updatedById ?? order.visit.progress?.updatedById ?? null,
+                    },
+                });
+                await tx.visitStateHistory.create({
+                    data: {
+                        visitId: order.visitId,
+                        fromState: currentState,
+                        toState: 'WAITING_RESULT',
+                        triggerEvent: 'CLS_COMPLETE',
+                        triggeredById: payload.updatedById ?? null,
+                        transitionedAt: now,
+                        note: payload.note ?? null,
+                    },
+                });
             }
         }
     });

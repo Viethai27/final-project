@@ -448,8 +448,6 @@ const visitStateAfterStart = (status: string | null | undefined) => {
   return null;
 };
 
-const visitStateAfterComplete = (_orderCount: number) => 'WAITING_RESULT';
-
 const getClsPriorityScore = (priority: 'ROUTINE' | 'URGENT') => (priority === 'URGENT' ? 85 : 55);
 
 const getClsLane = (priority: 'ROUTINE' | 'URGENT') => (priority === 'URGENT' ? 'PRIORITY' : 'NORMAL');
@@ -816,7 +814,7 @@ const mutateOrder = async (
   }
 
   const now = new Date();
-  const nextState = action === 'start' ? visitStateAfterStart(order.visit.progress?.currentState) : visitStateAfterComplete(order.visit.clsOrders.length);
+  const nextState = action === 'start' ? visitStateAfterStart(order.visit.progress?.currentState) : null;
 
   await prisma.$transaction(async tx => {
     await tx.cLSOrder.update({
@@ -908,6 +906,8 @@ const mutateOrder = async (
         },
       });
 
+      const currentState = order.visit.progress?.currentState ?? null;
+
       if (remainingOpenOrders === 0) {
         await tx.visitProgress.update({
           where: { visitId: order.visitId },
@@ -919,17 +919,19 @@ const mutateOrder = async (
           },
         });
 
-        await tx.visitStateHistory.create({
-          data: {
-            visitId: order.visitId,
-            fromState: 'WAITING_RESULT',
-            toState: 'WAITING_CONCLUSION',
-            triggerEvent: 'CLS_ALL_RESULTS_COMPLETED',
-            triggeredById: payload.updatedById ?? null,
-            transitionedAt: now,
-            note: payload.note ?? 'All CLS orders completed.',
-          },
-        });
+        if (currentState !== 'WAITING_CONCLUSION') {
+          await tx.visitStateHistory.create({
+            data: {
+              visitId: order.visitId,
+              fromState: currentState as any,
+              toState: 'WAITING_CONCLUSION',
+              triggerEvent: 'CLS_COMPLETE',
+              triggeredById: payload.updatedById ?? null,
+              transitionedAt: now,
+              note: payload.note ?? 'All CLS orders completed.',
+            },
+          });
+        }
 
         const existingConclusionQueue = await tx.queueItem.findFirst({
           where: {
@@ -1015,6 +1017,28 @@ const mutateOrder = async (
             },
           });
         }
+      } else if (currentState !== 'WAITING_RESULT') {
+        await tx.visitProgress.update({
+          where: { visitId: order.visitId },
+          data: {
+            currentState: 'WAITING_RESULT',
+            laneType: order.visit.progress?.laneType ?? 'NORMAL',
+            sameDoctorRequired: order.visit.progress?.sameDoctorRequired ?? false,
+            updatedById: payload.updatedById ?? order.visit.progress?.updatedById ?? null,
+          },
+        });
+
+        await tx.visitStateHistory.create({
+          data: {
+            visitId: order.visitId,
+            fromState: currentState as any,
+            toState: 'WAITING_RESULT',
+            triggerEvent: 'CLS_COMPLETE',
+            triggeredById: payload.updatedById ?? null,
+            transitionedAt: now,
+            note: payload.note ?? null,
+          },
+        });
       }
     }
   });
