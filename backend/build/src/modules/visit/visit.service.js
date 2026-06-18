@@ -1125,12 +1125,16 @@ const resolveWalkInService = async (tx, serviceId) => {
         where: { id: serviceId },
         select: {
             id: true,
+            serviceType: true,
             roomTypeRequired: true,
             isActive: true,
         },
     });
     if (!service || !service.isActive) {
         throw new http_error_1.AppError('Dịch vụ khám đã chọn không còn khả dụng.', 404);
+    }
+    if (service.serviceType !== 'EXAM') {
+        throw new http_error_1.AppError('Walk-in registration service must be an exam service, not a CLS service.', 400);
     }
     return service;
 };

@@ -1214,6 +1214,7 @@ const resolveWalkInService = async (tx: Prisma.TransactionClient, serviceId: str
     where: { id: serviceId },
     select: {
       id: true,
+      serviceType: true,
       roomTypeRequired: true,
       isActive: true,
     },
@@ -1221,6 +1222,10 @@ const resolveWalkInService = async (tx: Prisma.TransactionClient, serviceId: str
 
   if (!service || !service.isActive) {
     throw new AppError('Dịch vụ khám đã chọn không còn khả dụng.', 404);
+  }
+
+  if (service.serviceType !== 'EXAM') {
+    throw new AppError('Walk-in registration service must be an exam service, not a CLS service.', 400);
   }
 
   return service;
