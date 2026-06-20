@@ -45,6 +45,7 @@ export const getVisitDetail: RequestHandler = asyncHandler(async (req, res) => {
 
 export const createWalkInVisitHandler: RequestHandler = asyncHandler(async (req, res) => {
   const body = req.body as Record<string, unknown>;
+  const selectedPatientId = readNullableString(body.selectedPatientId) ?? readNullableString(body.patientId);
 
   const visit = await createWalkInVisit({
     patient: {
@@ -69,6 +70,8 @@ export const createWalkInVisitHandler: RequestHandler = asyncHandler(async (req,
       isUrgent: readBoolean(body.isUrgent),
       isPregnant: readBoolean(body.isPregnant),
     },
+    selectedPatientId,
+    createNewPatientOnPhoneMatch: readBoolean(body.createNewPatientOnPhoneMatch),
     updatedById: readNullableString(body.updatedById),
   });
 

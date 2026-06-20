@@ -1252,7 +1252,10 @@ const createWalkInVisit = async (input) => {
     }
     const createdVisitId = await prisma_1.prisma.$transaction(async (tx) => {
         const { age } = await (0, patient_intake_1.validateVisitBusinessRules)(tx, input.patient, input.visit);
-        const resolvedPatient = await (0, patient_intake_1.resolvePatientForIntake)(tx, input.patient);
+        const resolvedPatient = await (0, patient_intake_1.resolvePatientForIntake)(tx, input.patient, {
+            selectedPatientId: input.selectedPatientId ?? null,
+            createNewPatientOnPhoneMatch: input.createNewPatientOnPhoneMatch ?? false,
+        });
         const patient = resolvedPatient.patient;
         await (0, patient_intake_1.assertNoActiveVisitOrQueue)(tx, patient.id);
         const doctor = await resolveWalkInDoctor(tx, input.visit.doctorId);

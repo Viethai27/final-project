@@ -8,6 +8,8 @@ const errorMiddleware = (err, _req, res, _next) => {
         return res.status(err.statusCode).json({
             success: false,
             message: err.message,
+            ...(err.code ? { code: err.code } : {}),
+            ...(err.details !== undefined ? { details: err.details } : {}),
         });
     }
     if (err instanceof client_1.Prisma.PrismaClientInitializationError) {

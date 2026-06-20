@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
@@ -22,6 +22,7 @@ import { patientApi } from '../services/patientApi';
 import { queueApi } from '../services/queueApi';
 import { serviceApi } from '../services/serviceApi';
 import { visitApi } from '../services/visitApi';
+import { ApiError } from '../services/http';
 import type {
   AppointmentListItemDto,
   DepartmentDto,
@@ -32,12 +33,14 @@ import type {
   ServiceDto,
   VisitDetailForActionDto,
   VisitListItemDto,
+  WalkInRegistrationInputDto,
 } from '../services/backend-types';
 import { formatDateTime } from '../lib/format';
 import StatusBadge from '../components/ui/StatusBadge';
 import { LaneBadge, PriorityBadge } from '../components/ui/PriorityBadge';
 import type { PatientStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
+import Modal from '../components/ui/Modal';
 
 type ReceptionView = 'patient-records' | 'walk-in' | 'appointments' | 'patients' | 'visits' | 'queue';
 type GenderValue = 'MALE' | 'FEMALE' | 'OTHER';
@@ -75,6 +78,14 @@ type AppointmentFormState = BasePatientForm & {
   note: string;
   isPregnant: boolean;
   isUrgent: boolean;
+};
+
+type PhoneMatchPatient = PatientDto & {
+  hasActiveVisitOrQueue?: boolean;
+};
+
+type PhoneMatchDetails = {
+  matches?: PhoneMatchPatient[];
 };
 
 const VIEW_TITLES: Record<ReceptionView, string> = {
@@ -188,6 +199,19 @@ const createAppointmentForm = (): AppointmentFormState => {
     isUrgent: false,
   };
 };
+
+const toPatientForm = (patient: PatientDto): BasePatientForm => ({
+  fullName: patient.fullName ?? '',
+  gender: patient.gender ?? 'OTHER',
+  dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.slice(0, 10) : '',
+  phone: patient.phone ?? '',
+  idNumber: patient.idNumber ?? '',
+  address: patient.address ?? '',
+  insuranceNumber: patient.insuranceNumber ?? '',
+  isDisabled: Boolean(patient.isDisabled),
+  isDisabledHeavy: Boolean(patient.isDisabledHeavy),
+  isRevolutionary: Boolean(patient.isRevolutionary),
+});
 
 function SectionCard({
   title,
@@ -436,7 +460,17 @@ export default function ReceptionPage() {
   const [appointmentDateFilter, setAppointmentDateFilter] = useState('');
 
   const [walkInForm, setWalkInForm] = useState<WalkInFormState>(() => createWalkInForm());
+  const visitInfoRef = useRef<HTMLDivElement | null>(null);
+  const [selectedWalkInPatientId, setSelectedWalkInPatientId] = useState<string | null>(null);
+  const [walkInPatientSearch, setWalkInPatientSearch] = useState('');
+  const [walkInPatientMatches, setWalkInPatientMatches] = useState<PatientDto[]>([]);
+  const [walkInPatientSearchLoading, setWalkInPatientSearchLoading] = useState(false);
+  const [pendingWalkInPayload, setPendingWalkInPayload] = useState<WalkInRegistrationInputDto | null>(null);
+  const [pendingPatientPayload, setPendingPatientPayload] = useState<PatientCreateInputDto | null>(null);
+  const [pendingPatientTarget, setPendingPatientTarget] = useState<'patient-records' | 'walk-in' | null>(null);
+  const [phoneMatches, setPhoneMatches] = useState<PhoneMatchPatient[]>([]);
   const [patientForm, setPatientForm] = useState<BasePatientForm>(() => createBasePatientForm());
+  const [selectedPatientRecordId, setSelectedPatientRecordId] = useState<string | null>(null);
   const [appointmentForm, setAppointmentForm] = useState<AppointmentFormState>(() => createAppointmentForm());
 
   const [submittingPatient, setSubmittingPatient] = useState(false);
@@ -445,6 +479,7 @@ export default function ReceptionPage() {
   const [actioningAppointmentId, setActioningAppointmentId] = useState<string | null>(null);
 
   const [patientSuccess, setPatientSuccess] = useState<PatientDto | null>(null);
+  const [patientSuccessMode, setPatientSuccessMode] = useState<'created' | 'selected' | null>(null);
   const [walkInSuccess, setWalkInSuccess] = useState<VisitDetailForActionDto | null>(null);
   const [appointmentSuccess, setAppointmentSuccess] = useState<AppointmentListItemDto | null>(null);
   const [submitError, setSubmitError] = useState('');
@@ -480,6 +515,46 @@ export default function ReceptionPage() {
       setWalkInForm(current => ({ ...current, isPregnant: false }));
     }
   }, [walkInForm.gender, walkInForm.isPregnant]);
+
+  useEffect(() => {
+    if (activeView !== 'walk-in') {
+      setWalkInPatientMatches([]);
+      return;
+    }
+
+    const query = walkInPatientSearch.trim();
+    if (query.length < 2) {
+      setWalkInPatientMatches([]);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setWalkInPatientSearchLoading(true);
+      patientApi
+        .list({ page: 1, limit: 8, sort: 'desc', search: query })
+        .then(response => {
+          if (active) {
+            setWalkInPatientMatches(response.data);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setWalkInPatientMatches([]);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setWalkInPatientSearchLoading(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [activeView, walkInPatientSearch]);
 
   useEffect(() => {
     if (appointmentForm.gender !== 'FEMALE' && appointmentForm.isPregnant) {
@@ -623,14 +698,22 @@ export default function ReceptionPage() {
     setListSearch('');
     setSubmitError('');
     setPatientSuccess(null);
+    setPatientSuccessMode(null);
+    setSelectedPatientRecordId(null);
     setSearchParams({ view });
   };
 
   const updatePatientForm = <K extends keyof BasePatientForm>(key: K, value: BasePatientForm[K]) => {
+    if (selectedPatientRecordId || patientSuccess) {
+      setSelectedPatientRecordId(null);
+      setPatientSuccess(null);
+      setPatientSuccessMode(null);
+    }
     setPatientForm(current => ({ ...current, [key]: value }));
   };
 
   const updateWalkInPatientForm = <K extends keyof BasePatientForm>(key: K, value: BasePatientForm[K]) => {
+    setSelectedWalkInPatientId(null);
     setWalkInForm(current => ({ ...current, [key]: value }));
   };
 
@@ -669,21 +752,244 @@ export default function ReceptionPage() {
     isRevolutionary: form.isRevolutionary,
   });
 
-  const handleCreatePatient = async (event: FormEvent) => {
-    event.preventDefault();
-    setSubmitError('');
+  const validatePatientRecordForm = (form: BasePatientForm) => {
+    if (!form.fullName.trim()) {
+      return 'Vui long nhap ho va ten truoc khi tao ho so.';
+    }
+
+    if (!form.phone.trim()) {
+      return 'Vui long nhap so dien thoai truoc khi tao ho so.';
+    }
+
+    return '';
+  };
+
+  const buildWalkInPayload = (): WalkInRegistrationInputDto => {
+    const patientId = selectedWalkInPatientId;
+
+    return {
+      ...buildPatientPayload(walkInForm),
+      departmentId: walkInForm.departmentId,
+      serviceId: walkInForm.serviceId,
+      doctorId: walkInForm.doctorId || null,
+      chiefComplaint: walkInForm.chiefComplaint.trim() || null,
+      note: walkInForm.note.trim() || null,
+      isPregnant: walkInForm.gender === 'FEMALE' ? walkInForm.isPregnant : false,
+      isUrgent: walkInForm.isUrgent,
+      selectedPatientId: patientId,
+      patientId,
+      updatedById: user?.id ?? null,
+    };
+  };
+
+  const resetWalkInForm = () => {
+    setWalkInForm(createWalkInForm());
+    setSelectedWalkInPatientId(null);
+    setWalkInPatientSearch('');
+    setWalkInPatientMatches([]);
+  };
+
+  const resetPatientRecordForm = () => {
+    setPatientForm(createBasePatientForm());
+    setSelectedPatientRecordId(null);
     setPatientSuccess(null);
+    setPatientSuccessMode(null);
+    setPendingPatientPayload(null);
+    setPendingPatientTarget(null);
+    setPhoneMatches([]);
+    setSubmitError('');
+  };
+
+  const selectWalkInPatient = (patient: PatientDto) => {
+    setWalkInForm(current => ({
+      ...current,
+      ...toPatientForm(patient),
+    }));
+    setSelectedWalkInPatientId(patient.id);
+    setWalkInPatientSearch(`${patient.fullName} ${patient.patientCode}`);
+    setWalkInPatientMatches([]);
+  };
+
+  const getPhoneMatchesFromError = (err: unknown) => {
+    if (!(err instanceof ApiError) || err.code !== 'PHONE_MATCHES_FOUND') {
+      return null;
+    }
+
+    const details = err.details as PhoneMatchDetails | undefined;
+    return Array.isArray(details?.matches) ? details.matches : [];
+  };
+
+  const submitPatientPayload = async (
+    payload: PatientCreateInputDto,
+    target: 'patient-records' | 'walk-in',
+  ) => {
     setSubmittingPatient(true);
     try {
-      const response = await patientApi.create(buildPatientPayload(patientForm));
+      const response = await patientApi.create(payload);
       setPatientSuccess(response.data);
-      setPatientForm(createBasePatientForm());
+      setPatientSuccessMode('created');
+      setPendingPatientPayload(null);
+      setPendingPatientTarget(null);
+      setPhoneMatches([]);
+      if (target === 'patient-records') {
+        setPatientForm(toPatientForm(response.data));
+        setSelectedPatientRecordId(response.data.id);
+      } else {
+        setWalkInForm(current => ({
+          ...current,
+          ...toPatientForm(response.data),
+        }));
+        setSelectedWalkInPatientId(response.data.id);
+        setWalkInPatientSearch(`${response.data.fullName} ${response.data.patientCode}`);
+      }
       refreshCurrentView();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Không tạo được hồ sơ bệnh nhân.');
+      const matches = getPhoneMatchesFromError(err);
+      if (matches) {
+        if (matches.length === 0) {
+          setSubmitError(err instanceof Error ? err.message : 'So dien thoai da ton tai nhung backend khong tra ve danh sach ho so.');
+          return;
+        }
+
+        setPendingPatientPayload(payload);
+        setPendingPatientTarget(target);
+        setPhoneMatches(matches);
+        setSubmitError('');
+        return;
+      }
+
+      setSubmitError(err instanceof Error ? err.message : 'Khong tao duoc ho so benh nhan.');
     } finally {
       setSubmittingPatient(false);
     }
+  };
+
+  const submitWalkInPayload = async (payload: WalkInRegistrationInputDto) => {
+    setSubmittingWalkIn(true);
+    try {
+      const response = await visitApi.createWalkIn(payload);
+      setWalkInSuccess(response.data);
+      setPendingWalkInPayload(null);
+      setPhoneMatches([]);
+      resetWalkInForm();
+      refreshCurrentView();
+    } catch (err) {
+      const matches = getPhoneMatchesFromError(err);
+      if (matches) {
+        if (matches.length === 0) {
+          setSubmitError(err instanceof Error ? err.message : 'So dien thoai da ton tai nhung backend khong tra ve danh sach ho so.');
+          return;
+        }
+
+        setPendingWalkInPayload(payload);
+        setPhoneMatches(matches);
+        setSubmitError('');
+        return;
+      }
+
+      setSubmitError(err instanceof Error ? err.message : 'Khong dang ky kham tai quay duoc.');
+    } finally {
+      setSubmittingWalkIn(false);
+    }
+  };
+
+  const handleUsePhoneMatch = (patient: PhoneMatchPatient) => {
+    if (pendingWalkInPayload) {
+      selectWalkInPatient(patient);
+      void submitWalkInPayload({
+        ...pendingWalkInPayload,
+        ...toPatientForm(patient),
+        selectedPatientId: patient.id,
+        patientId: patient.id,
+        createNewPatientOnPhoneMatch: false,
+      });
+      return;
+    }
+
+    if (pendingPatientPayload) {
+      if (pendingPatientTarget === 'walk-in') {
+        selectWalkInPatient(patient);
+      } else {
+        setPatientForm(toPatientForm(patient));
+        setSelectedPatientRecordId(patient.id);
+      }
+      setPatientSuccess(patient);
+      setPatientSuccessMode('selected');
+      setPendingPatientPayload(null);
+      setPendingPatientTarget(null);
+      setPhoneMatches([]);
+      setSubmitError('');
+    }
+  };
+
+  const handleCreateNewForPhoneMatch = () => {
+    if (pendingWalkInPayload) {
+      void submitWalkInPayload({
+        ...pendingWalkInPayload,
+        selectedPatientId: null,
+        createNewPatientOnPhoneMatch: true,
+      });
+      return;
+    }
+
+    if (pendingPatientPayload) {
+      void submitPatientPayload(
+        {
+          ...pendingPatientPayload,
+          createNewPatientOnPhoneMatch: true,
+        },
+        pendingPatientTarget ?? 'patient-records',
+      );
+    }
+  };
+
+  const closePhoneMatchModal = () => {
+    setPendingWalkInPayload(null);
+    setPendingPatientPayload(null);
+    setPendingPatientTarget(null);
+    setPhoneMatches([]);
+  };
+
+  const handleCreatePatient = async (event: FormEvent) => {
+    event.preventDefault();
+    if (selectedPatientRecordId) {
+      return;
+    }
+    setSubmitError('');
+    setPatientSuccess(null);
+    setPatientSuccessMode(null);
+    await submitPatientPayload(buildPatientPayload(patientForm), 'patient-records');
+  };
+
+  const handleCreateWalkInPatientRecord = async () => {
+    setSubmitError('');
+    setPatientSuccess(null);
+    setWalkInSuccess(null);
+
+    const validationError = validatePatientRecordForm(walkInForm);
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
+    }
+
+    await submitPatientPayload(buildPatientPayload(walkInForm), 'walk-in');
+  };
+
+  const startWalkInForCreatedPatient = () => {
+    if (!patientSuccess) return;
+
+    setWalkInForm(current => ({
+      ...current,
+      ...toPatientForm(patientSuccess),
+    }));
+    setSelectedWalkInPatientId(patientSuccess.id);
+    setWalkInPatientSearch(`${patientSuccess.fullName} ${patientSuccess.patientCode}`);
+    setWalkInPatientMatches([]);
+    setSubmitError('');
+    setSearchParams({ view: 'walk-in' });
+    window.setTimeout(() => {
+      visitInfoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   const handleWalkIn = async (event: FormEvent) => {
@@ -696,27 +1002,7 @@ export default function ReceptionPage() {
       return;
     }
 
-    setSubmittingWalkIn(true);
-    try {
-      const response = await visitApi.createWalkIn({
-        ...buildPatientPayload(walkInForm),
-        departmentId: walkInForm.departmentId,
-        serviceId: walkInForm.serviceId,
-        doctorId: walkInForm.doctorId || null,
-        chiefComplaint: walkInForm.chiefComplaint.trim() || null,
-        note: walkInForm.note.trim() || null,
-        isPregnant: walkInForm.gender === 'FEMALE' ? walkInForm.isPregnant : false,
-        isUrgent: walkInForm.isUrgent,
-        updatedById: user?.id ?? null,
-      });
-      setWalkInSuccess(response.data);
-      setWalkInForm(createWalkInForm());
-      refreshCurrentView();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Không đăng ký khám tại quầy được.');
-    } finally {
-      setSubmittingWalkIn(false);
-    }
+    await submitWalkInPayload(buildWalkInPayload());
   };
 
   const handleCreateAppointment = async (event: FormEvent) => {
@@ -844,13 +1130,18 @@ export default function ReceptionPage() {
               <form className="space-y-4" onSubmit={handleCreatePatient}>
                 <PatientFields value={patientForm} onChange={(key, value) => updatePatientForm(key, value)} />
                 <div className="flex gap-3">
-                  <button type="submit" disabled={submittingPatient} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
+                  <button type="submit" disabled={submittingPatient || Boolean(selectedPatientRecordId)} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
                     {submittingPatient ? 'Đang lưu...' : 'Tạo hồ sơ'}
                   </button>
-                  <button type="button" onClick={() => setPatientForm(createBasePatientForm())} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-                    Làm mới form
+                  <button type="button" onClick={resetPatientRecordForm} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                    Tạo hồ sơ khác
                   </button>
                 </div>
+                {selectedPatientRecordId ? (
+                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                    {patientSuccessMode === 'selected' ? 'Hồ sơ có sẵn đang được chọn.' : 'Hồ sơ vừa tạo đang được chọn.'}
+                  </p>
+                ) : null}
               </form>
             </SectionCard>
 
@@ -860,10 +1151,27 @@ export default function ReceptionPage() {
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="text-emerald-700" size={20} />
                     <div>
-                      <p className="font-semibold text-emerald-900">Đã tạo hồ sơ bệnh nhân</p>
+                      <p className="font-semibold text-emerald-900">
+                        {patientSuccessMode === 'selected' ? 'Đã chọn hồ sơ bệnh nhân có sẵn.' : 'Đã tạo hồ sơ bệnh nhân.'}
+                      </p>
                       <p className="mt-1 text-sm text-emerald-700">
                         {patientSuccess.fullName} · {patientSuccess.patientCode}
                       </p>
+                      <button
+                        type="button"
+                        onClick={startWalkInForCreatedPatient}
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                      >
+                        <FilePlus2 size={16} />
+                        &#272;&#259;ng k&#253; kh&#225;m cho b&#7879;nh nh&#226;n n&#224;y
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetPatientRecordForm}
+                        className="ml-2 mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Tạo hồ sơ khác
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -880,8 +1188,109 @@ export default function ReceptionPage() {
           <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
             <SectionCard title="Đăng ký khám ngay trong ngày" description="Flow này không có chọn giờ khám. Submit xong phải có Visit, QueueItem, Turn và số thứ tự.">
               <form className="space-y-4" onSubmit={handleWalkIn}>
-                <PatientFields value={walkInForm} onChange={updateWalkInPatientForm} />
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-4 flex flex-col gap-1">
+                    <h4 className="text-sm font-bold text-gray-900">Thông tin hồ sơ bệnh nhân</h4>
+                    <p className="text-xs text-gray-500">Tìm theo CCCD, số điện thoại, BHYT hoặc họ tên; chọn hồ sơ chỉ điền phần bệnh nhân.</p>
+                  </div>
+                  <div className="mb-4">
+                    <FieldLabel>Tìm hồ sơ đã có</FieldLabel>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <TextInput
+                        value={walkInPatientSearch}
+                        onChange={event => setWalkInPatientSearch(event.target.value)}
+                        placeholder="CCCD, SĐT, BHYT hoặc họ tên"
+                        className="pl-9"
+                      />
+                    </div>
+                    {selectedWalkInPatientId ? (
+                      <p className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                        Đang dùng hồ sơ bệnh nhân đã chọn. Sửa thông tin định danh sẽ bỏ chọn hồ sơ này.
+                      </p>
+                    ) : null}
+                    {walkInPatientSearchLoading ? (
+                      <p className="mt-2 text-xs text-gray-500">Đang tìm hồ sơ...</p>
+                    ) : null}
+                    {walkInPatientMatches.length > 0 ? (
+                      <div className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                        {walkInPatientMatches.map(patient => (
+                          <button
+                            key={patient.id}
+                            type="button"
+                            onClick={() => selectWalkInPatient(patient)}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-sky-50"
+                          >
+                            <span>
+                              <span className="font-semibold text-gray-900">{patient.fullName}</span>
+                              <span className="ml-2 text-xs text-gray-500">{patient.patientCode}</span>
+                              <span className="mt-0.5 block text-xs text-gray-500">
+                                {patient.phone || 'Chưa có SĐT'} · {patient.idNumber || 'Chưa có CCCD'} · {patient.insuranceNumber || 'Chưa có BHYT'}
+                              </span>
+                            </span>
+                            <span className="text-xs font-semibold text-sky-700">Chọn</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <PatientFields value={walkInForm} onChange={updateWalkInPatientForm} />
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCreateWalkInPatientRecord}
+                      disabled={submittingPatient || submittingWalkIn || Boolean(selectedWalkInPatientId)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+                    >
+                      <UserPlus2 size={16} />
+                      T&#7841;o h&#7891; s&#417;
+                    </button>
+                    {selectedWalkInPatientId ? (
+                      <span className="text-xs font-semibold text-emerald-700">H&#7891; s&#417; &#273;&#227; &#273;&#432;&#7907;c ch&#7885;n.</span>
+                    ) : null}
+                  </div>
+                  {patientSuccess ? (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="text-emerald-700" size={20} />
+                        <div>
+                          <p className="font-semibold text-emerald-900">
+                            {patientSuccessMode === 'selected' ? 'Đã chọn hồ sơ bệnh nhân có sẵn.' : 'Đã tạo hồ sơ bệnh nhân.'}
+                          </p>
+                          <p className="mt-1 text-sm text-emerald-700">
+                            {patientSuccess.fullName} &middot; {patientSuccess.patientCode}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={startWalkInForCreatedPatient}
+                            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                          >
+                            <FilePlus2 size={16} />
+                            &#272;&#259;ng k&#253; kh&#225;m cho b&#7879;nh nh&#226;n n&#224;y
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetWalkInForm();
+                              setPatientSuccess(null);
+                              setPatientSuccessMode(null);
+                              setSubmitError('');
+                            }}
+                            className="ml-2 mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Tạo hồ sơ khác
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
 
+                <div ref={visitInfoRef} className="rounded-2xl border border-gray-200 bg-white p-4">
+                  <div className="mb-4 flex flex-col gap-1">
+                    <h4 className="text-sm font-bold text-gray-900">Thông tin lượt khám</h4>
+                    <p className="text-xs text-gray-500">Thông tin tiếp nhận cho visit hiện tại, luôn bắt đầu mới sau mỗi lần đăng ký.</p>
+                  </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <FieldLabel required>Khoa khám</FieldLabel>
@@ -942,6 +1351,7 @@ export default function ReceptionPage() {
                     onChange={next => updateWalkInForm('isUrgent', next)}
                   />
                 </div>
+                </div>
 
                 <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-800">
                   Khám tại quầy luôn là “khám ngay trong ngày”. Không có field chọn thời gian khám ở flow này.
@@ -951,7 +1361,7 @@ export default function ReceptionPage() {
                   <button type="submit" disabled={submittingWalkIn} className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">
                     {submittingWalkIn ? 'Đang đăng ký...' : 'Đăng ký khám tại quầy'}
                   </button>
-                  <button type="button" onClick={() => setWalkInForm(createWalkInForm())} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                  <button type="button" onClick={resetWalkInForm} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Làm mới form
                   </button>
                 </div>
@@ -1323,6 +1733,64 @@ export default function ReceptionPage() {
           </>
         )}
       </div>
+      <Modal
+        open={phoneMatches.length > 0 && Boolean(pendingWalkInPayload || pendingPatientPayload)}
+        onClose={closePhoneMatchModal}
+        title="Số điện thoại đã có hồ sơ"
+        size="lg"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closePhoneMatchModal}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateNewForPhoneMatch}
+              disabled={submittingWalkIn || submittingPatient}
+              className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+            >
+              Vẫn tạo hồ sơ mới
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            {pendingWalkInPayload
+              ? 'Số điện thoại này trùng với hồ sơ đã có. Chọn hồ sơ cũ để tạo lượt khám cho bệnh nhân đó, hoặc xác nhận tạo hồ sơ mới nếu đây là người khác dùng chung số điện thoại.'
+              : 'Số điện thoại này trùng với hồ sơ đã có. Chọn hồ sơ cũ để dùng lại thông tin bệnh nhân, hoặc xác nhận vẫn tạo hồ sơ mới nếu đây là người khác dùng chung số điện thoại.'}
+          </p>
+          <div className="divide-y divide-gray-100 rounded-2xl border border-gray-200">
+            {phoneMatches.map(patient => (
+              <div key={patient.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">
+                    {patient.fullName} <span className="font-mono text-xs text-gray-500">{patient.patientCode}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {patient.phone || 'Chưa có SĐT'} · {patient.idNumber || 'Chưa có CCCD'} · {patient.insuranceNumber || 'Chưa có BHYT'}
+                  </p>
+                  {patient.hasActiveVisitOrQueue ? (
+                    <p className="mt-1 text-xs font-semibold text-amber-700">Đang có lượt khám hoặc hàng đợi active.</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleUsePhoneMatch(patient)}
+                  disabled={submittingWalkIn || submittingPatient}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                >
+                  Dùng hồ sơ này
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 }

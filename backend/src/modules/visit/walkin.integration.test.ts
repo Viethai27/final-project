@@ -60,7 +60,7 @@ type WalkInPatientOverrides = Partial<{
 
 const extractJson = async (response: Response) => {
   const data = await response.json();
-  return data as { success: boolean; data?: any; message?: string };
+  return data as { success: boolean; data?: any; message?: string; code?: string; details?: any };
 };
 
 const cleanupPatientArtifacts = async (identity: PatientIdentity) => {
@@ -204,6 +204,17 @@ const createWalkIn = async (payload: ReturnType<typeof createWalkInPayload>, bas
   return { response, body };
 };
 
+const createPatient = async (payload: Record<string, unknown>, baseUrl: string) => {
+  const response = await fetch(`${baseUrl}/patients`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await extractJson(response);
+  return { response, body };
+};
+
 const getPatientArtifacts = async (patientId: string) => {
   const [visitCount, queueItemCount, turnCount] = await Promise.all([
     prisma.visit.count({
@@ -302,6 +313,326 @@ describe('Reception walk-in workflow', () => {
     expect(afterCount).toBe(beforeCount + 1);
     expect(patient).not.toBeNull();
     expect(patient?.phone).toBe(patientPayload.phone);
+
+    const artifacts = await getPatientArtifacts(patient!.id);
+    expect(artifacts.visitCount).toBe(0);
+    expect(artifacts.queueItemCount).toBe(0);
+    expect(artifacts.turnCount).toBe(0);
+  });
+
+  it('POST /patients returns phone matches instead of creating when phone already exists', async () => {
+    const suffix = randomSuffix();
+    const sharedPhone = `09${suffix.slice(-8)}`;
+    const existing = await createSeedPatient({
+      fullName: 'Patient Create Phone Existing',
+      phone: sharedPhone,
+      idNumber: `PC-ID-EX-${suffix}`,
+      insuranceNumber: `PC-BHYT-EX-${suffix}`,
+      address: 'Existing Patient Address',
+    });
+    const incomingPayload = {
+      ...buildPatientPayload(`${suffix}phone`),
+      fullName: 'Patient Create Phone Incoming',
+      phone: sharedPhone,
+      idNumber: `PC-ID-IN-${suffix}`,
+      insuranceNumber: `PC-BHYT-IN-${suffix}`,
+    };
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: existing.idNumber,
+      insuranceNumber: existing.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: incomingPayload.idNumber,
+      insuranceNumber: incomingPayload.insuranceNumber,
+    });
+
+    const result = await createPatient(incomingPayload, baseUrl);
+    const createdIncoming = await prisma.patient.findFirst({
+      where: { idNumber: incomingPayload.idNumber },
+    });
+
+    expect(result.response.status).toBe(409);
+    expect(result.body.success).toBe(false);
+    expect(result.body.code).toBe('PHONE_MATCHES_FOUND');
+    expect(result.body.details?.matches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: existing.id,
+          fullName: existing.fullName,
+          phone: sharedPhone,
+        }),
+      ]),
+    );
+    expect(createdIncoming).toBeNull();
+  });
+
+  it('POST /patients creates a new patient with the same phone after confirmation flag', async () => {
+    const suffix = randomSuffix();
+    const sharedPhone = `09${suffix.slice(-8)}`;
+    const existing = await createSeedPatient({
+      fullName: 'Patient Create Confirm Existing',
+      phone: sharedPhone,
+      idNumber: `PCF-ID-EX-${suffix}`,
+      insuranceNumber: `PCF-BHYT-EX-${suffix}`,
+    });
+    const incomingPayload = {
+      ...buildPatientPayload(`${suffix}confirm`),
+      fullName: 'Patient Create Confirm New',
+      phone: sharedPhone,
+      idNumber: `PCF-ID-IN-${suffix}`,
+      insuranceNumber: `PCF-BHYT-IN-${suffix}`,
+      createNewPatientOnPhoneMatch: true,
+    };
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: existing.idNumber,
+      insuranceNumber: existing.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: incomingPayload.idNumber,
+      insuranceNumber: incomingPayload.insuranceNumber,
+    });
+
+    const result = await createPatient(incomingPayload, baseUrl);
+    const patientsWithPhone = await prisma.patient.findMany({
+      where: { phone: sharedPhone },
+      orderBy: { fullName: 'asc' },
+    });
+    const artifacts = await getPatientArtifacts(result.body.data?.id);
+
+    expect(result.response.status).toBe(201);
+    expect(result.body.success).toBe(true);
+    expect(result.body.data?.id).not.toBe(existing.id);
+    expect(result.body.data?.phone).toBe(sharedPhone);
+    expect(patientsWithPhone).toHaveLength(2);
+    expect(artifacts.visitCount).toBe(0);
+    expect(artifacts.queueItemCount).toBe(0);
+    expect(artifacts.turnCount).toBe(0);
+  });
+
+  it('POST /patients still rejects strong CCCD or BHYT duplicates even with phone confirmation flag', async () => {
+    const suffix = randomSuffix();
+    const existing = await createSeedPatient({
+      fullName: 'Patient Create Strong Existing',
+      phone: `09${suffix.slice(-8)}`,
+      idNumber: `PCS-ID-${suffix}`,
+      insuranceNumber: `PCS-BHYT-${suffix}`,
+    });
+    const incomingPayload = {
+      ...buildPatientPayload(`${suffix}strong`),
+      phone: `08${suffix.slice(-8)}`,
+      idNumber: existing.idNumber,
+      insuranceNumber: `PCS-BHYT-IN-${suffix}`,
+      createNewPatientOnPhoneMatch: true,
+    };
+    const bhytPayload = {
+      ...buildPatientPayload(`${suffix}bhyt`),
+      phone: `07${suffix.slice(-8)}`,
+      idNumber: `PCS-ID-IN-${suffix}`,
+      insuranceNumber: existing.insuranceNumber,
+      createNewPatientOnPhoneMatch: true,
+    };
+    cleanupTargets.push({
+      phone: existing.phone,
+      idNumber: existing.idNumber,
+      insuranceNumber: existing.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: incomingPayload.phone,
+      idNumber: incomingPayload.idNumber,
+      insuranceNumber: incomingPayload.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: bhytPayload.phone,
+      idNumber: bhytPayload.idNumber,
+      insuranceNumber: bhytPayload.insuranceNumber,
+    });
+
+    const result = await createPatient(incomingPayload, baseUrl);
+    const bhytResult = await createPatient(bhytPayload, baseUrl);
+    const patientsWithId = await prisma.patient.findMany({
+      where: { idNumber: existing.idNumber },
+    });
+    const patientsWithBhyt = await prisma.patient.findMany({
+      where: { insuranceNumber: existing.insuranceNumber },
+    });
+
+    expect(result.response.status).toBe(409);
+    expect(result.body.success).toBe(false);
+    expect(bhytResult.response.status).toBe(409);
+    expect(bhytResult.body.success).toBe(false);
+    expect(patientsWithId).toHaveLength(1);
+    expect(patientsWithId[0].id).toBe(existing.id);
+    expect(patientsWithBhyt).toHaveLength(1);
+    expect(patientsWithBhyt[0].id).toBe(existing.id);
+  });
+
+  it('POST /visits/walk-in accepts patientId alias and creates a visit for the selected existing patient', async () => {
+    const suffix = randomSuffix();
+    const patientPayload = buildPatientPayload(suffix);
+    const incomingIdentity = {
+      phone: `08${suffix.slice(-8)}`,
+      idNumber: `INCOMING-${suffix}`,
+      insuranceNumber: `BHYT-INCOMING-${suffix}`,
+    };
+    cleanupTargets.push({
+      phone: patientPayload.phone,
+      idNumber: patientPayload.idNumber,
+      insuranceNumber: patientPayload.insuranceNumber,
+    });
+    cleanupTargets.push(incomingIdentity);
+
+    await cleanupPatientArtifacts({
+      phone: patientPayload.phone,
+      idNumber: patientPayload.idNumber,
+      insuranceNumber: patientPayload.insuranceNumber,
+    });
+    await cleanupPatientArtifacts(incomingIdentity);
+
+    const patientResponse = await fetch(`${baseUrl}/patients`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patientPayload),
+    });
+    const patientBody = await extractJson(patientResponse);
+    expect(patientResponse.status).toBe(201);
+    const selectedPatientId = patientBody.data.id;
+
+    const walkIn = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}selected`, {
+          fullName: 'Incoming Should Not Create Patient',
+          phone: incomingIdentity.phone,
+          idNumber: incomingIdentity.idNumber,
+          insuranceNumber: incomingIdentity.insuranceNumber,
+          address: 'Incoming Address Should Not Overwrite',
+        }),
+        patientId: selectedPatientId,
+      } as any,
+      baseUrl,
+    );
+
+    const refreshedPatient = await prisma.patient.findUnique({
+      where: { id: selectedPatientId },
+    });
+    const incomingPatient = await prisma.patient.findFirst({
+      where: {
+        OR: [
+          { phone: incomingIdentity.phone },
+          { idNumber: incomingIdentity.idNumber },
+          { insuranceNumber: incomingIdentity.insuranceNumber },
+        ],
+      },
+    });
+    const visit = await prisma.visit.findUnique({
+      where: { id: walkIn.body.data?.visitId },
+      include: {
+        progress: true,
+        stateHistories: true,
+        queueItems: { include: { status: true } },
+        turns: { include: { progress: true } },
+      },
+    });
+
+    expect(walkIn.response.status).toBe(201);
+    expect(walkIn.body.success).toBe(true);
+    expect(walkIn.body.data.patient.id).toBe(selectedPatientId);
+    expect(walkIn.body.data.queueNumber).toMatch(/^N\d{3}$|^P\d{3}$/);
+    expect(incomingPatient).toBeNull();
+    expect(refreshedPatient?.fullName).toBe(patientPayload.fullName);
+    expect(refreshedPatient?.address).toBe(patientPayload.address);
+    expect(visit?.patientId).toBe(selectedPatientId);
+    expect(visit?.progress?.currentState).toBe('WAITING_EXAM');
+    expect(visit?.stateHistories.some(history => history.fromState === null && history.toState === 'WAITING_EXAM')).toBe(true);
+    expect(visit?.queueItems).toHaveLength(1);
+    expect(visit?.queueItems[0]?.status?.status).toBe('WAITING');
+    expect(visit?.turns).toHaveLength(1);
+    expect(visit?.turns[0]?.progress?.status).toBe('PENDING');
+  });
+
+  it('rejects selectedPatientId when the selected patient already has an active walk-in', async () => {
+    const suffix = randomSuffix();
+    const patientPayload = buildPatientPayload(suffix);
+    cleanupTargets.push({
+      phone: patientPayload.phone,
+      idNumber: patientPayload.idNumber,
+      insuranceNumber: patientPayload.insuranceNumber,
+    });
+
+    const patientResponse = await fetch(`${baseUrl}/patients`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patientPayload),
+    });
+    const patientBody = await extractJson(patientResponse);
+    expect(patientResponse.status).toBe(201);
+    const selectedPatientId = patientBody.data.id;
+
+    const first = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}first`),
+        selectedPatientId,
+      } as any,
+      baseUrl,
+    );
+    const second = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}second`),
+        selectedPatientId,
+      } as any,
+      baseUrl,
+    );
+    const artifacts = await getPatientArtifacts(selectedPatientId);
+
+    expect(first.response.status).toBe(201);
+    expect(second.response.status).toBe(409);
+    expect(second.body.success).toBe(false);
+    expect(second.body.message?.toLowerCase()).toMatch(/hàng đợi|hoạt động|active/);
+    expect(artifacts.visitCount).toBe(1);
+    expect(artifacts.queueItemCount).toBe(1);
+    expect(artifacts.turnCount).toBe(1);
+  });
+
+  it('rejects walk-in with a missing selectedPatientId without creating patient, visit, queue or turn', async () => {
+    const suffix = randomSuffix();
+    const incomingIdentity = {
+      phone: `08${suffix.slice(-8)}`,
+      idNumber: `MISSING-${suffix}`,
+      insuranceNumber: `BHYT-MISSING-${suffix}`,
+    };
+    cleanupTargets.push(incomingIdentity);
+
+    await cleanupPatientArtifacts(incomingIdentity);
+
+    const missing = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}missing`, {
+          fullName: 'Missing Selected Patient',
+          phone: incomingIdentity.phone,
+          idNumber: incomingIdentity.idNumber,
+          insuranceNumber: incomingIdentity.insuranceNumber,
+        }),
+        selectedPatientId: `missing-${suffix}`,
+      } as any,
+      baseUrl,
+    );
+    const createdPatient = await prisma.patient.findFirst({
+      where: {
+        OR: [
+          { phone: incomingIdentity.phone },
+          { idNumber: incomingIdentity.idNumber },
+          { insuranceNumber: incomingIdentity.insuranceNumber },
+        ],
+      },
+      select: { id: true },
+    });
+
+    expect(missing.response.status).toBe(404);
+    expect(missing.body.success).toBe(false);
+    expect(createdPatient).toBeNull();
   });
 
   it('POST /visits/walk-in creates patient, visit, queue, turn and exposes the patient in queue/turn lists', async () => {
@@ -439,7 +770,7 @@ describe('Reception walk-in workflow', () => {
     expect(refreshedPatient?.phone).toBe(basePayload.phone);
   });
 
-  it('rejects duplicate phone for a patient already active without overwriting the patient profile', async () => {
+  it('returns phone matches instead of auto-selecting when only phone matches an active patient', async () => {
     const suffix = randomSuffix();
     const basePayload = buildPatientPayload(suffix);
     cleanupTargets.push({
@@ -486,11 +817,172 @@ describe('Reception walk-in workflow', () => {
 
     expect(duplicate.response.status).toBe(409);
     expect(duplicate.body.success).toBe(false);
-    expect(duplicate.body.message?.toLowerCase()).toMatch(/hàng đợi|hoạt động|active/);
+    expect(duplicate.body.code).toBe('PHONE_MATCHES_FOUND');
+    expect(duplicate.body.details?.matches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: patient.id,
+          fullName: 'Patient Phone Original',
+          phone: basePayload.phone,
+          hasActiveVisitOrQueue: true,
+        }),
+      ]),
+    );
+    expect(duplicate.body.message?.toLowerCase()).toMatch(/phone|active|số điện thoại/);
+    const createdIncoming = await prisma.patient.findFirst({
+      where: { idNumber: `NEW-ID-${suffix}` },
+    });
     expect(artifacts.visitCount).toBe(1);
     expect(artifacts.queueItemCount).toBe(1);
     expect(refreshedPatient?.fullName).toBe('Patient Phone Original');
     expect(refreshedPatient?.address).toBe('Phone Old Address');
+    expect(createdIncoming).toBeNull();
+  });
+
+  it('allows creating a new patient with the same phone after receptionist confirmation', async () => {
+    const suffix = randomSuffix();
+    const sharedPhone = `09${suffix.slice(-8)}`;
+    const existing = await createSeedPatient({
+      fullName: 'Shared Phone Existing',
+      phone: sharedPhone,
+      idNumber: `EXIST-PHONE-${suffix}`,
+      insuranceNumber: `BHYT-EXIST-PHONE-${suffix}`,
+      address: 'Shared Phone Old Address',
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: existing.idNumber,
+      insuranceNumber: existing.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: `NEW-PHONE-${suffix}`,
+      insuranceNumber: `BHYT-NEW-PHONE-${suffix}`,
+    });
+
+    const walkIn = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}phone-new`, {
+          fullName: 'Shared Phone New Patient',
+          phone: sharedPhone,
+          idNumber: `NEW-PHONE-${suffix}`,
+          insuranceNumber: `BHYT-NEW-PHONE-${suffix}`,
+          address: 'Shared Phone New Address',
+        }),
+        createNewPatientOnPhoneMatch: true,
+      } as any,
+      baseUrl,
+    );
+
+    const patients = await prisma.patient.findMany({
+      where: { phone: sharedPhone },
+      orderBy: [{ createdAt: 'asc' }],
+    });
+    const existingArtifacts = await getPatientArtifacts(existing.id);
+    const createdPatient = patients.find(patient => patient.idNumber === `NEW-PHONE-${suffix}`);
+
+    expect(walkIn.response.status).toBe(201);
+    expect(walkIn.body.success).toBe(true);
+    expect(patients).toHaveLength(2);
+    expect(createdPatient).not.toBeNull();
+    expect(walkIn.body.data.patient.id).toBe(createdPatient?.id);
+    expect(existingArtifacts.visitCount).toBe(0);
+  });
+
+  it('uses an existing phone-matched patient only when receptionist selects that profile', async () => {
+    const suffix = randomSuffix();
+    const sharedPhone = `09${suffix.slice(-8)}`;
+    const existing = await createSeedPatient({
+      fullName: 'Selected Phone Existing',
+      phone: sharedPhone,
+      idNumber: null,
+      insuranceNumber: null,
+      address: 'Selected Phone Old Address',
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: existing.idNumber,
+      insuranceNumber: existing.insuranceNumber,
+    });
+
+    const walkIn = await createWalkIn(
+      {
+        ...createWalkInPayload(`${suffix}phone-selected`, {
+          fullName: 'Selected Phone Incoming Changed',
+          phone: sharedPhone,
+          idNumber: null,
+          insuranceNumber: null,
+          address: 'Selected Phone New Address',
+        }),
+        selectedPatientId: existing.id,
+      } as any,
+      baseUrl,
+    );
+
+    const refreshedPatient = await prisma.patient.findUnique({ where: { id: existing.id } });
+    const artifacts = await getPatientArtifacts(existing.id);
+    const patients = await prisma.patient.findMany({ where: { phone: sharedPhone } });
+
+    expect(walkIn.response.status).toBe(201);
+    expect(walkIn.body.success).toBe(true);
+    expect(walkIn.body.data.patient.id).toBe(existing.id);
+    expect(artifacts.visitCount).toBe(1);
+    expect(refreshedPatient?.fullName).toBe('Selected Phone Existing');
+    expect(refreshedPatient?.address).toBe('Selected Phone Old Address');
+    expect(patients).toHaveLength(1);
+  });
+
+  it('returns all patients sharing a phone number and does not pick one automatically', async () => {
+    const suffix = randomSuffix();
+    const sharedPhone = `09${suffix.slice(-8)}`;
+    const patientA = await createSeedPatient({
+      fullName: 'Shared Phone A',
+      phone: sharedPhone,
+      idNumber: `SHARED-A-${suffix}`,
+      insuranceNumber: `BHYT-SHARED-A-${suffix}`,
+    });
+    const patientB = await createSeedPatient({
+      fullName: 'Shared Phone B',
+      phone: sharedPhone,
+      idNumber: `SHARED-B-${suffix}`,
+      insuranceNumber: `BHYT-SHARED-B-${suffix}`,
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: patientA.idNumber,
+      insuranceNumber: patientA.insuranceNumber,
+    });
+    cleanupTargets.push({
+      phone: sharedPhone,
+      idNumber: patientB.idNumber,
+      insuranceNumber: patientB.insuranceNumber,
+    });
+
+    const match = await createWalkIn(
+      createWalkInPayload(`${suffix}phone-many`, {
+        fullName: 'Shared Phone Incoming',
+        phone: sharedPhone,
+        idNumber: null,
+        insuranceNumber: null,
+      }),
+      baseUrl,
+    );
+
+    const totalVisits = await prisma.visit.count({
+      where: { patientId: { in: [patientA.id, patientB.id] } },
+    });
+
+    expect(match.response.status).toBe(409);
+    expect(match.body.success).toBe(false);
+    expect(match.body.code).toBe('PHONE_MATCHES_FOUND');
+    expect(match.body.details?.matches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: patientA.id, fullName: 'Shared Phone A' }),
+        expect.objectContaining({ id: patientB.id, fullName: 'Shared Phone B' }),
+      ]),
+    );
+    expect(match.body.details?.matches).toHaveLength(2);
+    expect(totalVisits).toBe(0);
   });
 
   it('rejects duplicate insuranceNumber for a patient already active without overwriting the patient profile', async () => {
@@ -642,9 +1134,9 @@ describe('Reception walk-in workflow', () => {
     const conflict = await createWalkIn(
       createWalkInPayload(`${suffix}5`, {
         fullName: 'Identity Conflict Incoming',
-        phone: patientB.phone ?? `08${suffix.slice(-8)}`,
+        phone: `07${suffix.slice(-8)}`,
         idNumber: patientA.idNumber,
-        insuranceNumber: `BHYT-IN-${suffix}`,
+        insuranceNumber: patientB.insuranceNumber,
         address: 'Conflict Address Incoming',
       }),
       baseUrl,

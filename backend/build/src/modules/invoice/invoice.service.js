@@ -127,7 +127,7 @@ const payInvoice = async (id, payload) => {
         throw new http_error_1.AppError('Invoice not found.', 404);
     }
     if (invoice.status === 'PAID') {
-        return (0, exports.getInvoiceById)(id);
+        throw new http_error_1.AppError('Invoice is already paid.', 409);
     }
     if (invoice.visit.progress?.currentState !== 'WAITING_PAYMENT') {
         throw new http_error_1.AppError('Visit must be WAITING_PAYMENT before payment.', 409);

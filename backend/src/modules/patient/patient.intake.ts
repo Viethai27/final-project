@@ -26,6 +26,11 @@ export type IntakeVisitInput = {
   isPregnant: boolean;
 };
 
+export type ResolvePatientForIntakeOptions = {
+  selectedPatientId?: string | null;
+  createNewPatientOnPhoneMatch?: boolean;
+};
+
 export const patientSelect = {
   id: true,
   patientCode: true,
@@ -246,6 +251,47 @@ const ACTIVE_VISIT_STATES = [
 
 const ACTIVE_QUEUE_STATUSES = ['WAITING', 'CALLED', 'SERVING'] as const;
 
+const hasActiveVisitOrQueue = async (
+  tx: Prisma.TransactionClient,
+  patientId: string,
+) => {
+  const activeQueueItem = await tx.queueItem.findFirst({
+    where: {
+      visit: {
+        patientId,
+      },
+      status: {
+        is: {
+          status: {
+            in: [...ACTIVE_QUEUE_STATUSES] as any,
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (activeQueueItem) {
+    return true;
+  }
+
+  const activeVisit = await tx.visit.findFirst({
+    where: {
+      patientId,
+      progress: {
+        is: {
+          currentState: {
+            in: [...ACTIVE_VISIT_STATES] as any,
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  return Boolean(activeVisit);
+};
+
 export const findPatientsByUniqueIdentifiers = async (
   tx: Prisma.TransactionClient,
   input: IntakePatientInput,
@@ -278,8 +324,8 @@ export const findPatientsByUniqueIdentifiers = async (
   };
 };
 
-const getMatchedPatients = (matches: Awaited<ReturnType<typeof findPatientsByUniqueIdentifiers>>) => {
-  const patients = [...matches.byIdNumber, ...matches.byInsuranceNumber, ...matches.byPhone];
+const getStrongMatchedPatients = (matches: Awaited<ReturnType<typeof findPatientsByUniqueIdentifiers>>) => {
+  const patients = [...matches.byIdNumber, ...matches.byInsuranceNumber];
   const uniquePatients = new Map(patients.map(patient => [patient.id, patient]));
   return Array.from(uniquePatients.values());
 };
@@ -287,28 +333,82 @@ const getMatchedPatients = (matches: Awaited<ReturnType<typeof findPatientsByUni
 const getConflictMessage = () =>
   'IDENTITY_CONFLICT: Thông tin định danh bị xung đột với nhiều hồ sơ bệnh nhân khác nhau. Vui lòng kiểm tra lại CCCD/SĐT/BHYT.';
 
+const buildPhoneMatchesDetails = async (
+  tx: Prisma.TransactionClient,
+  patients: Awaited<ReturnType<typeof findPatientsByUniqueIdentifiers>>['byPhone'],
+) => {
+  const matches = await Promise.all(
+    patients.map(async patient => ({
+      ...mapPatient(patient),
+      hasActiveVisitOrQueue: await hasActiveVisitOrQueue(tx, patient.id),
+    })),
+  );
+
+  return {
+    matches,
+  };
+};
+
 export const resolvePatientForIntake = async (
   tx: Prisma.TransactionClient,
   input: IntakePatientInput,
+  options: ResolvePatientForIntakeOptions = {},
 ) => {
   const { dateOfBirth, age } = validatePatientInput(input);
   const matches = await findPatientsByUniqueIdentifiers(tx, input);
-  const matchedPatients = getMatchedPatients(matches);
+  const strongMatchedPatients = getStrongMatchedPatients(matches);
 
-  if (matchedPatients.length > 1) {
+  if (strongMatchedPatients.length > 1) {
     throw new AppError(getConflictMessage(), 409);
   }
 
-  if (matchedPatients.length === 1) {
+  if (options.selectedPatientId) {
+    const selectedPatient = await tx.patient.findUnique({
+      where: { id: options.selectedPatientId },
+      select: patientSelect,
+    });
+
+    if (!selectedPatient) {
+      throw new AppError('Ho so benh nhan da chon khong ton tai.', 404);
+    }
+
+    if (strongMatchedPatients.length === 1 && strongMatchedPatients[0].id !== selectedPatient.id) {
+      throw new AppError(getConflictMessage(), 409);
+    }
+
     return {
-      patient: matchedPatients[0],
+      patient: selectedPatient,
       created: false,
       matchedBy: {
-        idNumber: matches.byIdNumber.some(patient => patient.id === matchedPatients[0].id),
-        insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === matchedPatients[0].id),
-        phone: matches.byPhone.some(patient => patient.id === matchedPatients[0].id),
+        idNumber: matches.byIdNumber.some(patient => patient.id === selectedPatient.id),
+        insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === selectedPatient.id),
+        phone: matches.byPhone.some(patient => patient.id === selectedPatient.id),
       },
     };
+  }
+
+  if (strongMatchedPatients.length === 1) {
+    const strongMatchedPatient = strongMatchedPatients[0];
+    return {
+      patient: strongMatchedPatient,
+      created: false,
+      matchedBy: {
+        idNumber: matches.byIdNumber.some(patient => patient.id === strongMatchedPatient.id),
+        insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === strongMatchedPatient.id),
+        phone: matches.byPhone.some(patient => patient.id === strongMatchedPatient.id),
+      },
+    };
+  }
+
+  if (matches.byPhone.length > 0 && !options.createNewPatientOnPhoneMatch) {
+    throw new AppError(
+      'PHONE_MATCHES_FOUND: So dien thoai da ton tai o ho so khac. Vui long chon ho so cu hoac xac nhan tao ho so moi.',
+      409,
+      {
+        code: 'PHONE_MATCHES_FOUND',
+        details: await buildPhoneMatchesDetails(tx, matches.byPhone),
+      },
+    );
   }
 
   const patientCode = await generatePatientCode(tx);

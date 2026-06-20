@@ -40,6 +40,8 @@ exports.createPatient = (0, async_handler_1.asyncHandler)(async (req, res) => {
         isDisabled: readBoolean(body.isDisabled),
         isDisabledHeavy: readBoolean(body.isDisabledHeavy),
         isRevolutionary: readBoolean(body.isRevolutionary),
+    }, {
+        createNewPatientOnPhoneMatch: readBoolean(body.createNewPatientOnPhoneMatch),
     });
     (0, response_1.sendSuccess)(res, patient, 201);
 });

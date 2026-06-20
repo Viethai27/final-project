@@ -46,6 +46,8 @@ export const createPatient: RequestHandler = asyncHandler(async (req, res) => {
     isDisabled: readBoolean(body.isDisabled),
     isDisabledHeavy: readBoolean(body.isDisabledHeavy),
     isRevolutionary: readBoolean(body.isRevolutionary),
+  }, {
+    createNewPatientOnPhoneMatch: readBoolean(body.createNewPatientOnPhoneMatch),
   });
 
   sendSuccess(res, patient, 201);

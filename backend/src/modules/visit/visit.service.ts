@@ -1366,6 +1366,8 @@ const ensureInvoiceForVisit = async (tx: Prisma.TransactionClient, visitId: stri
 export const createWalkInVisit = async (input: {
   patient: IntakePatientInput;
   visit: IntakeVisitInput;
+  selectedPatientId?: string | null;
+  createNewPatientOnPhoneMatch?: boolean;
   updatedById?: string | null;
 }) => {
   if (!input.visit.departmentId) {
@@ -1378,7 +1380,10 @@ export const createWalkInVisit = async (input: {
 
   const createdVisitId = await prisma.$transaction(async tx => {
     const { age } = await validateVisitBusinessRules(tx, input.patient, input.visit);
-    const resolvedPatient = await resolvePatientForIntake(tx, input.patient);
+    const resolvedPatient = await resolvePatientForIntake(tx, input.patient, {
+      selectedPatientId: input.selectedPatientId ?? null,
+      createNewPatientOnPhoneMatch: input.createNewPatientOnPhoneMatch ?? false,
+    });
     const patient = resolvedPatient.patient;
     await assertNoActiveVisitOrQueue(tx, patient.id);
     const doctor = await resolveWalkInDoctor(tx, input.visit.doctorId);

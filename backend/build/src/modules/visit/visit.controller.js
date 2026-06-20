@@ -37,6 +37,7 @@ exports.getVisitDetail = (0, async_handler_1.asyncHandler)(async (req, res) => {
 });
 exports.createWalkInVisitHandler = (0, async_handler_1.asyncHandler)(async (req, res) => {
     const body = req.body;
+    const selectedPatientId = readNullableString(body.selectedPatientId) ?? readNullableString(body.patientId);
     const visit = await (0, visit_service_1.createWalkInVisit)({
         patient: {
             fullName: readString(body.fullName),
@@ -60,6 +61,8 @@ exports.createWalkInVisitHandler = (0, async_handler_1.asyncHandler)(async (req,
             isUrgent: readBoolean(body.isUrgent),
             isPregnant: readBoolean(body.isPregnant),
         },
+        selectedPatientId,
+        createNewPatientOnPhoneMatch: readBoolean(body.createNewPatientOnPhoneMatch),
         updatedById: readNullableString(body.updatedById),
     });
     (0, response_1.sendSuccess)(res, visit, 201);

@@ -138,7 +138,7 @@ export const payInvoice = async (
   }
 
   if (invoice.status === 'PAID') {
-    return getInvoiceById(id);
+    throw new AppError('Invoice is already paid.', 409);
   }
 
   if (invoice.visit.progress?.currentState !== 'WAITING_PAYMENT') {

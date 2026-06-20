@@ -187,6 +187,40 @@ const ACTIVE_VISIT_STATES = [
     'WAITING_PAYMENT',
 ];
 const ACTIVE_QUEUE_STATUSES = ['WAITING', 'CALLED', 'SERVING'];
+const hasActiveVisitOrQueue = async (tx, patientId) => {
+    const activeQueueItem = await tx.queueItem.findFirst({
+        where: {
+            visit: {
+                patientId,
+            },
+            status: {
+                is: {
+                    status: {
+                        in: [...ACTIVE_QUEUE_STATUSES],
+                    },
+                },
+            },
+        },
+        select: { id: true },
+    });
+    if (activeQueueItem) {
+        return true;
+    }
+    const activeVisit = await tx.visit.findFirst({
+        where: {
+            patientId,
+            progress: {
+                is: {
+                    currentState: {
+                        in: [...ACTIVE_VISIT_STATES],
+                    },
+                },
+            },
+        },
+        select: { id: true },
+    });
+    return Boolean(activeVisit);
+};
 const findPatientsByUniqueIdentifiers = async (tx, input) => {
     const [byIdNumber, byInsuranceNumber, byPhone] = await Promise.all([
         input.idNumber
@@ -215,29 +249,66 @@ const findPatientsByUniqueIdentifiers = async (tx, input) => {
     };
 };
 exports.findPatientsByUniqueIdentifiers = findPatientsByUniqueIdentifiers;
-const getMatchedPatients = (matches) => {
-    const patients = [...matches.byIdNumber, ...matches.byInsuranceNumber, ...matches.byPhone];
+const getStrongMatchedPatients = (matches) => {
+    const patients = [...matches.byIdNumber, ...matches.byInsuranceNumber];
     const uniquePatients = new Map(patients.map(patient => [patient.id, patient]));
     return Array.from(uniquePatients.values());
 };
 const getConflictMessage = () => 'IDENTITY_CONFLICT: Thông tin định danh bị xung đột với nhiều hồ sơ bệnh nhân khác nhau. Vui lòng kiểm tra lại CCCD/SĐT/BHYT.';
-const resolvePatientForIntake = async (tx, input) => {
+const buildPhoneMatchesDetails = async (tx, patients) => {
+    const matches = await Promise.all(patients.map(async (patient) => ({
+        ...(0, exports.mapPatient)(patient),
+        hasActiveVisitOrQueue: await hasActiveVisitOrQueue(tx, patient.id),
+    })));
+    return {
+        matches,
+    };
+};
+const resolvePatientForIntake = async (tx, input, options = {}) => {
     const { dateOfBirth, age } = (0, exports.validatePatientInput)(input);
     const matches = await (0, exports.findPatientsByUniqueIdentifiers)(tx, input);
-    const matchedPatients = getMatchedPatients(matches);
-    if (matchedPatients.length > 1) {
+    const strongMatchedPatients = getStrongMatchedPatients(matches);
+    if (strongMatchedPatients.length > 1) {
         throw new http_error_1.AppError(getConflictMessage(), 409);
     }
-    if (matchedPatients.length === 1) {
+    if (options.selectedPatientId) {
+        const selectedPatient = await tx.patient.findUnique({
+            where: { id: options.selectedPatientId },
+            select: exports.patientSelect,
+        });
+        if (!selectedPatient) {
+            throw new http_error_1.AppError('Ho so benh nhan da chon khong ton tai.', 404);
+        }
+        if (strongMatchedPatients.length === 1 && strongMatchedPatients[0].id !== selectedPatient.id) {
+            throw new http_error_1.AppError(getConflictMessage(), 409);
+        }
         return {
-            patient: matchedPatients[0],
+            patient: selectedPatient,
             created: false,
             matchedBy: {
-                idNumber: matches.byIdNumber.some(patient => patient.id === matchedPatients[0].id),
-                insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === matchedPatients[0].id),
-                phone: matches.byPhone.some(patient => patient.id === matchedPatients[0].id),
+                idNumber: matches.byIdNumber.some(patient => patient.id === selectedPatient.id),
+                insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === selectedPatient.id),
+                phone: matches.byPhone.some(patient => patient.id === selectedPatient.id),
             },
         };
+    }
+    if (strongMatchedPatients.length === 1) {
+        const strongMatchedPatient = strongMatchedPatients[0];
+        return {
+            patient: strongMatchedPatient,
+            created: false,
+            matchedBy: {
+                idNumber: matches.byIdNumber.some(patient => patient.id === strongMatchedPatient.id),
+                insuranceNumber: matches.byInsuranceNumber.some(patient => patient.id === strongMatchedPatient.id),
+                phone: matches.byPhone.some(patient => patient.id === strongMatchedPatient.id),
+            },
+        };
+    }
+    if (matches.byPhone.length > 0 && !options.createNewPatientOnPhoneMatch) {
+        throw new http_error_1.AppError('PHONE_MATCHES_FOUND: So dien thoai da ton tai o ho so khac. Vui long chon ho so cu hoac xac nhan tao ho so moi.', 409, {
+            code: 'PHONE_MATCHES_FOUND',
+            details: await buildPhoneMatchesDetails(tx, matches.byPhone),
+        });
     }
     const patientCode = await (0, exports.generatePatientCode)(tx);
     const patient = await tx.patient.create({

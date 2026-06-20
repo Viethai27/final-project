@@ -7,6 +7,8 @@ export type ApiSuccess<T> = {
 export type ApiFailure = {
   success: false;
   message: string;
+  code?: string;
+  details?: unknown;
 };
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
@@ -656,6 +658,7 @@ export interface PatientCreateInputDto {
   isDisabled?: boolean;
   isDisabledHeavy?: boolean;
   isRevolutionary?: boolean;
+  createNewPatientOnPhoneMatch?: boolean;
 }
 
 export interface WalkInRegistrationInputDto extends PatientCreateInputDto {
@@ -666,6 +669,9 @@ export interface WalkInRegistrationInputDto extends PatientCreateInputDto {
   note?: string | null;
   isPregnant?: boolean;
   isUrgent?: boolean;
+  selectedPatientId?: string | null;
+  patientId?: string | null;
+  createNewPatientOnPhoneMatch?: boolean;
   updatedById?: string | null;
 }
 
