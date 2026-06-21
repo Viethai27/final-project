@@ -260,6 +260,13 @@ describe('Doctor CLS order workflow', () => {
     });
     await startExam(baseUrl, visitId);
 
+    const beforeOrder = await getVisitClsArtifacts(visitId);
+    const clinicalTurnBefore = beforeOrder?.turns.find(turn => turn.turnType === 'CLINICAL_EXAM');
+    const examQueueBefore = beforeOrder?.queueItems.find(item => item.queueType === 'EXAM');
+    expect(beforeOrder?.progress?.currentState).toBe('IN_EXAM');
+    expect(clinicalTurnBefore?.progress?.status).toBe('IN_PROGRESS');
+    expect(examQueueBefore?.status?.status).toBe('SERVING');
+
     const order = await createClsOrder(baseUrl, { visitId });
 
     expect(order.response.status).toBe(201);
@@ -272,6 +279,8 @@ describe('Doctor CLS order workflow', () => {
     const clsOrderId = order.body.data.clsOrderId as string;
 
     const visit = await getVisitClsArtifacts(visitId);
+    const clinicalTurn = visit?.turns.find(turn => turn.turnType === 'CLINICAL_EXAM');
+    const examQueue = visit?.queueItems.find(item => item.queueType === 'EXAM');
     expect(visit?.progress?.currentState).toBe('WAITING_CLS');
     expect(visit?.stateHistories).toEqual(
       expect.arrayContaining([
@@ -293,6 +302,10 @@ describe('Doctor CLS order workflow', () => {
         }),
       ]),
     );
+    expect(clinicalTurn?.progress?.status).toBe('COMPLETED');
+    expect(clinicalTurn?.progress?.endedAt).not.toBeNull();
+    expect(clinicalTurn?.progress?.durationMinutes).not.toBeNull();
+    expect(examQueue?.status?.status).toBe('DONE');
 
     const clsQueue = visit?.queueItems.find(item => item.queueType === 'CLS');
     expect(clsQueue).toEqual(
@@ -315,6 +328,8 @@ describe('Doctor CLS order workflow', () => {
 
     const clsTurns = visit?.turns.filter(turn => ['CLS_LAB', 'CLS_IMAGING'].includes(turn.turnType));
     expect(clsTurns).toHaveLength(0);
+    expect(visit?.turns.filter(turn => turn.turnType === 'CONCLUSION')).toHaveLength(0);
+    expect(visit?.progress?.currentState).not.toBe('WAITING_CONCLUSION');
 
     const labListResponse = await fetch(`${baseUrl}/cls/orders?status=PENDING&search=${encodeURIComponent(payload.fullName)}`);
     const labListBody = await extractJson(labListResponse);

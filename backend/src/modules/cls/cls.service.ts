@@ -609,6 +609,98 @@ export const createClsOrder = async (input: CreateClsOrderInput) => {
 
     createdOrderId = order.id;
 
+    const clinicalExamTurnProgress = await tx.turnProgress.findFirst({
+      where: {
+        status: 'IN_PROGRESS',
+        turn: {
+          visitId: visit.id,
+          turnType: 'CLINICAL_EXAM',
+        },
+      },
+      select: {
+        id: true,
+        calledAt: true,
+        startedAt: true,
+        note: true,
+        turn: {
+          select: {
+            queueItemId: true,
+            queueItem: {
+              select: {
+                initialPriorityScore: true,
+                status: {
+                  select: {
+                    status: true,
+                    priorityScore: true,
+                    calledAt: true,
+                    servedAt: true,
+                    isTimeout: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (clinicalExamTurnProgress) {
+      await tx.turnProgress.update({
+        where: { id: clinicalExamTurnProgress.id },
+        data: {
+          status: 'COMPLETED',
+          endedAt: now,
+          durationMinutes: Math.max(
+            0,
+            Math.round(
+              (now.getTime() -
+                (clinicalExamTurnProgress.startedAt ?? clinicalExamTurnProgress.calledAt ?? now).getTime()) /
+                60000,
+            ),
+          ),
+          note: clinicalExamTurnProgress.note ?? input.note ?? input.clinicalNote,
+          updatedById: input.updatedById,
+        },
+      });
+
+      const examQueueItemId = clinicalExamTurnProgress.turn.queueItemId;
+      if (examQueueItemId) {
+        const queueStatus = clinicalExamTurnProgress.turn.queueItem?.status;
+        await tx.queueItemStatus.updateMany({
+          where: {
+            queueItemId: examQueueItemId,
+            status: 'SERVING',
+          },
+          data: {
+            status: 'DONE',
+            priorityScore:
+              queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? 0,
+            lastScoreUpdated: now,
+            calledAt: queueStatus?.calledAt ?? clinicalExamTurnProgress.calledAt ?? now,
+            servedAt: queueStatus?.servedAt ?? clinicalExamTurnProgress.startedAt ?? now,
+            dequeuedAt: now,
+            isTimeout: queueStatus?.isTimeout ?? false,
+            updatedById: input.updatedById,
+          },
+        });
+
+        await tx.queueItemHistory.create({
+          data: {
+            queueItemId: examQueueItemId,
+            eventType: 'ORDER_CLS',
+            fromStatus: queueStatus?.status as any,
+            toStatus: 'DONE',
+            fromScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? null,
+            toScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? null,
+            eventTime: now,
+            triggeredBy: 'doctor',
+            triggeredByUserId: input.updatedById,
+            note: input.note ?? input.clinicalNote,
+          },
+        });
+      }
+    }
+
     await tx.visitProgress.update({
       where: { visitId: visit.id },
       data: {
