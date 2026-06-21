@@ -176,7 +176,7 @@ async function main() {
         });
         await tx.visitClinical.createMany({
             data: [
-                { id: 'vc_1', visitId: 'visit_normal', provisionalDiagnosis: 'Theo dõi đau đầu do căng thẳng', clinicalNotes: 'Khám ban đầu', examStartAt: dt('2026-06-11T07:50:00'), updatedAt: dt('2026-06-11T08:00:00') },
+                { id: 'vc_1', visitId: 'visit_normal', provisionalDiagnosis: 'Theo dõi đau đầu do căng thẳng', clinicalNotes: 'Thông tin ban đầu', examStartAt: null, updatedAt: dt('2026-06-11T08:00:00') },
                 { id: 'vc_2', visitId: 'visit_appointment', provisionalDiagnosis: 'Khám sức khỏe định kỳ', clinicalNotes: 'Lịch hẹn đúng giờ', examStartAt: dt('2026-06-11T08:12:00'), updatedAt: dt('2026-06-11T08:20:00') },
                 { id: 'vc_3', visitId: 'visit_child', provisionalDiagnosis: 'Theo dõi sốt siêu vi', clinicalNotes: 'Ưu tiên trẻ em', examStartAt: dt('2026-06-11T07:58:00'), updatedAt: dt('2026-06-11T08:05:00') },
                 { id: 'vc_4', visitId: 'visit_pregnant', provisionalDiagnosis: 'Khám thai định kỳ', clinicalNotes: 'Bệnh nhân có thai - ưu tiên', examStartAt: dt('2026-06-11T08:08:00'), updatedAt: dt('2026-06-11T08:15:00') },
@@ -249,7 +249,7 @@ async function main() {
         });
         await tx.turnProgress.createMany({
             data: [
-                { id: 'tp_1', turnId: 'turn_1', status: 'COMPLETED', calledAt: dt('2026-06-11T07:50:00'), startedAt: dt('2026-06-11T07:52:00'), endedAt: dt('2026-06-11T08:15:00'), timeoutAt: null, durationMinutes: 23, note: 'Khám xong', updatedById: 'user_bsnam' },
+                { id: 'tp_1', turnId: 'turn_1', status: 'PENDING', calledAt: null, startedAt: null, endedAt: null, timeoutAt: null, durationMinutes: null, note: 'Chờ gọi khám', updatedById: 'user_bsnam' },
                 { id: 'tp_2', turnId: 'turn_2', status: 'IN_PROGRESS', calledAt: dt('2026-06-11T08:50:00'), startedAt: dt('2026-06-11T08:55:00'), endedAt: null, timeoutAt: null, durationMinutes: null, note: 'Đang thực hiện xét nghiệm', updatedById: 'user_ktvxn' },
                 { id: 'tp_3', turnId: 'turn_3', status: 'PENDING', calledAt: null, startedAt: null, endedAt: null, timeoutAt: null, durationMinutes: null, note: 'Chờ gọi vào phòng', updatedById: 'user_dieuphoi' },
                 { id: 'tp_4', turnId: 'turn_4', status: 'CALLED', calledAt: dt('2026-06-11T09:42:00'), startedAt: null, endedAt: null, timeoutAt: null, durationMinutes: null, note: 'Đang chờ thanh toán', updatedById: 'user_dieuphoi' },

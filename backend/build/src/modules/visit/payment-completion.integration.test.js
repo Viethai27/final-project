@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_events_1 = require("node:events");
+const client_1 = require("@prisma/client");
 const vitest_1 = require("vitest");
 const app_1 = require("../../app");
 const prisma_1 = require("../../lib/prisma");
@@ -10,13 +11,13 @@ const TEST_CLS_SERVICE_ID = 'svc_blood';
 const TEST_DOCTOR_ID = 'doctor_bsnam';
 const randomSuffix = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
 const buildPatientPayload = (suffix) => ({
-    fullName: `Doctor Conclusion Test ${suffix}`,
+    fullName: `Payment Completion Test ${suffix}`,
     gender: 'MALE',
     dateOfBirth: '1990-01-15',
-    phone: `09${suffix.slice(-8)}`,
-    idNumber: `079${suffix.slice(-9)}`,
-    address: 'Doctor conclusion integration test address',
-    insuranceNumber: `BHYT-CONCLUSION-${suffix}`,
+    phone: `08${suffix.slice(-8)}`,
+    idNumber: `068${suffix.slice(-9)}`,
+    address: 'Payment completion integration test address',
+    insuranceNumber: `BHYT-PAYMENT-${suffix}`,
     isDisabled: false,
     isDisabledHeavy: false,
     isRevolutionary: false,
@@ -27,7 +28,7 @@ const createWalkInPayload = (suffix) => ({
     serviceId: TEST_EXAM_SERVICE_ID,
     doctorId: TEST_DOCTOR_ID,
     chiefComplaint: 'Met moi',
-    note: 'Doctor conclusion integration test',
+    note: 'Payment completion integration test',
     isPregnant: false,
     isUrgent: false,
     updatedById: null,
@@ -129,7 +130,7 @@ const startExam = async (baseUrl, visitId) => {
     const response = await fetch(`${baseUrl}/turns/${turn.id}/start`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ note: 'Start exam before conclusion test' }),
+        body: JSON.stringify({ note: 'Start exam before payment test' }),
     });
     const body = await extractJson(response);
     (0, vitest_1.expect)(response.status).toBe(200);
@@ -144,8 +145,8 @@ const orderCls = async (baseUrl, visitId) => {
             orderedById: TEST_DOCTOR_ID,
             serviceId: TEST_CLS_SERVICE_ID,
             priority: 'ROUTINE',
-            clinicalNote: 'Doctor orders CLS before conclusion test',
-            note: 'Doctor conclusion integration test',
+            clinicalNote: 'Doctor orders CLS before payment test',
+            note: 'Payment completion integration test',
             updatedById: null,
         }),
     });
@@ -158,7 +159,7 @@ const startCls = async (baseUrl, clsOrderId) => {
     const response = await fetch(`${baseUrl}/cls/orders/${clsOrderId}/start`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ note: 'Lab starts CLS before conclusion test' }),
+        body: JSON.stringify({ note: 'Lab starts CLS before payment test' }),
     });
     const body = await extractJson(response);
     (0, vitest_1.expect)(response.status).toBe(200);
@@ -169,9 +170,9 @@ const completeCls = async (baseUrl, clsOrderId) => {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-            resultText: 'Result ready for doctor conclusion',
+            resultText: 'Result ready before payment',
             isAbnormal: false,
-            note: 'Lab completes CLS before conclusion test',
+            note: 'Lab completes CLS before payment test',
             updatedById: null,
         }),
     });
@@ -179,26 +180,19 @@ const completeCls = async (baseUrl, clsOrderId) => {
     (0, vitest_1.expect)(response.status).toBe(200);
     (0, vitest_1.expect)(body.success).toBe(true);
 };
-const prepareWaitingConclusionVisit = async (baseUrl, suffix) => {
-    const { payload, visitId } = await createWalkIn(baseUrl, suffix);
-    await startExam(baseUrl, visitId);
-    const clsOrderId = await orderCls(baseUrl, visitId);
-    await startCls(baseUrl, clsOrderId);
-    await completeCls(baseUrl, clsOrderId);
+const startConclusion = async (baseUrl, visitId) => {
     const conclusionTurn = await prisma_1.prisma.turn.findFirstOrThrow({
         where: { visitId, turnType: 'CONCLUSION' },
         select: { id: true },
     });
-    return { payload, visitId, conclusionTurnId: conclusionTurn.id };
-};
-const startConclusion = async (baseUrl, conclusionTurnId) => {
-    const response = await fetch(`${baseUrl}/turns/${conclusionTurnId}/start`, {
+    const response = await fetch(`${baseUrl}/turns/${conclusionTurn.id}/start`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ note: 'Doctor starts conclusion' }),
+        body: JSON.stringify({ note: 'Doctor starts conclusion before payment' }),
     });
     const body = await extractJson(response);
-    return { response, body };
+    (0, vitest_1.expect)(response.status).toBe(200);
+    (0, vitest_1.expect)(body.success).toBe(true);
 };
 const completeConclusion = async (baseUrl, visitId) => {
     const response = await fetch(`${baseUrl}/visits/${visitId}/conclusion`, {
@@ -208,14 +202,43 @@ const completeConclusion = async (baseUrl, visitId) => {
             finalDiagnosis: 'Viem hong cap',
             conclusion: 'Dieu tri ngoai tru',
             treatmentPlan: 'Uong thuoc 5 ngay',
-            note: 'Doctor completes conclusion',
+            note: 'Doctor completes conclusion before payment',
             updatedById: null,
+        }),
+    });
+    const body = await extractJson(response);
+    (0, vitest_1.expect)(response.status).toBe(200);
+    (0, vitest_1.expect)(body.success).toBe(true);
+};
+const prepareWaitingPaymentVisit = async (baseUrl, suffix) => {
+    const { payload, visitId } = await createWalkIn(baseUrl, suffix);
+    await startExam(baseUrl, visitId);
+    const clsOrderId = await orderCls(baseUrl, visitId);
+    await startCls(baseUrl, clsOrderId);
+    await completeCls(baseUrl, clsOrderId);
+    await startConclusion(baseUrl, visitId);
+    await completeConclusion(baseUrl, visitId);
+    const invoice = await prisma_1.prisma.invoice.findUniqueOrThrow({
+        where: { visitId },
+        select: { id: true, status: true },
+    });
+    (0, vitest_1.expect)(invoice.status).toBe('UNPAID');
+    return { payload, visitId, invoiceId: invoice.id };
+};
+const payInvoice = async (baseUrl, invoiceId) => {
+    const response = await fetch(`${baseUrl}/invoices/${invoiceId}/pay`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+            paymentMethod: 'CASH',
+            paidById: null,
+            note: 'Cashier confirms payment',
         }),
     });
     const body = await extractJson(response);
     return { response, body };
 };
-const getVisitConclusionArtifacts = async (visitId) => {
+const getPaymentArtifacts = async (visitId) => {
     return prisma_1.prisma.visit.findUnique({
         where: { id: visitId },
         include: {
@@ -229,15 +252,38 @@ const getVisitConclusionArtifacts = async (visitId) => {
             stateHistories: {
                 orderBy: { transitionedAt: 'asc' },
             },
-            turns: {
-                include: {
-                    progress: true,
-                },
-            },
         },
     });
 };
-(0, vitest_1.describe)('Doctor conclusion workflow', () => {
+const createInvoiceBeforePaymentState = async (visitId) => {
+    const service = await prisma_1.prisma.serviceCatalog.findUniqueOrThrow({
+        where: { id: TEST_EXAM_SERVICE_ID },
+        select: { id: true, name: true, price: true },
+    });
+    const unitPrice = service.price ?? new client_1.Prisma.Decimal(0);
+    const invoice = await prisma_1.prisma.invoice.create({
+        data: {
+            visitId,
+            totalAmount: unitPrice,
+            paidAmount: new client_1.Prisma.Decimal(0),
+            status: 'UNPAID',
+            items: {
+                create: [
+                    {
+                        serviceId: service.id,
+                        description: service.name,
+                        quantity: 1,
+                        unitPrice,
+                        totalPrice: unitPrice,
+                    },
+                ],
+            },
+        },
+        select: { id: true },
+    });
+    return invoice.id;
+};
+(0, vitest_1.describe)('Payment completion workflow', () => {
     let server;
     let baseUrl = '';
     let cleanupTargets = [];
@@ -267,88 +313,21 @@ const getVisitConclusionArtifacts = async (visitId) => {
         });
         await prisma_1.prisma.$disconnect();
     });
-    (0, vitest_1.it)('D1 starts a conclusion turn from WAITING_CONCLUSION', async () => {
+    (0, vitest_1.it)('E1 exposes a WAITING_PAYMENT visit in the PaymentPage invoice list', async () => {
         const suffix = randomSuffix();
-        const { payload, visitId, conclusionTurnId } = await prepareWaitingConclusionVisit(baseUrl, suffix);
+        const { payload, visitId, invoiceId } = await prepareWaitingPaymentVisit(baseUrl, suffix);
         cleanupTargets.push({
             phone: payload.phone,
             idNumber: payload.idNumber,
             insuranceNumber: payload.insuranceNumber,
         });
-        const start = await startConclusion(baseUrl, conclusionTurnId);
-        (0, vitest_1.expect)(start.response.status).toBe(200);
-        (0, vitest_1.expect)(start.body.success).toBe(true);
-        (0, vitest_1.expect)(start.body.data.progress.status).toBe('IN_PROGRESS');
-        const visit = await getVisitConclusionArtifacts(visitId);
-        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('IN_CONCLUSION');
-        (0, vitest_1.expect)(visit?.turns.find(turn => turn.id === conclusionTurnId)?.progress?.status).toBe('IN_PROGRESS');
-        (0, vitest_1.expect)(visit?.stateHistories).toEqual(vitest_1.expect.arrayContaining([
+        const response = await fetch(`${baseUrl}/invoices`);
+        const body = await extractJson(response);
+        (0, vitest_1.expect)(response.status).toBe(200);
+        (0, vitest_1.expect)(body.success).toBe(true);
+        (0, vitest_1.expect)(body.data).toEqual(vitest_1.expect.arrayContaining([
             vitest_1.expect.objectContaining({
-                fromState: 'WAITING_CONCLUSION',
-                toState: 'IN_CONCLUSION',
-                triggerEvent: 'TURN_START',
-            }),
-        ]));
-        (0, vitest_1.expect)(visit?.clinical?.conclusionStartAt).not.toBeNull();
-    }, 15000);
-    (0, vitest_1.it)('D2 rejects conclusion start when visit is not WAITING_CONCLUSION', async () => {
-        const suffix = randomSuffix();
-        const { payload, visitId, conclusionTurnId } = await prepareWaitingConclusionVisit(baseUrl, suffix);
-        cleanupTargets.push({
-            phone: payload.phone,
-            idNumber: payload.idNumber,
-            insuranceNumber: payload.insuranceNumber,
-        });
-        await prisma_1.prisma.visitProgress.update({
-            where: { visitId },
-            data: { currentState: 'IN_EXAM' },
-        });
-        const start = await startConclusion(baseUrl, conclusionTurnId);
-        (0, vitest_1.expect)(start.response.status).toBe(409);
-        (0, vitest_1.expect)(start.body.success).toBe(false);
-        (0, vitest_1.expect)(start.body.message).toMatch(/Visit state does not allow/i);
-        const visit = await getVisitConclusionArtifacts(visitId);
-        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('IN_EXAM');
-        (0, vitest_1.expect)(visit?.turns.find(turn => turn.id === conclusionTurnId)?.progress?.status).toBe('PENDING');
-        (0, vitest_1.expect)(visit?.stateHistories.some(history => history.fromState === 'WAITING_CONCLUSION' && history.toState === 'IN_CONCLUSION')).toBe(false);
-    }, 15000);
-    (0, vitest_1.it)('D3 completes conclusion, creates invoice, and exposes the visit to Payment API', async () => {
-        const suffix = randomSuffix();
-        const { payload, visitId, conclusionTurnId } = await prepareWaitingConclusionVisit(baseUrl, suffix);
-        cleanupTargets.push({
-            phone: payload.phone,
-            idNumber: payload.idNumber,
-            insuranceNumber: payload.insuranceNumber,
-        });
-        const start = await startConclusion(baseUrl, conclusionTurnId);
-        (0, vitest_1.expect)(start.response.status).toBe(200);
-        const complete = await completeConclusion(baseUrl, visitId);
-        (0, vitest_1.expect)(complete.response.status).toBe(200);
-        (0, vitest_1.expect)(complete.body.success).toBe(true);
-        (0, vitest_1.expect)(complete.body.data.currentState).toBe('WAITING_PAYMENT');
-        const visit = await getVisitConclusionArtifacts(visitId);
-        (0, vitest_1.expect)(visit?.clinical?.id).toBeTruthy();
-        (0, vitest_1.expect)(visit?.clinical?.finalDiagnosis).toBe('Viem hong cap');
-        (0, vitest_1.expect)(visit?.clinical?.conclusion).toBe('Dieu tri ngoai tru');
-        (0, vitest_1.expect)(visit?.clinical?.treatmentPlan).toBe('Uong thuoc 5 ngay');
-        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('WAITING_PAYMENT');
-        (0, vitest_1.expect)(visit?.stateHistories).toEqual(vitest_1.expect.arrayContaining([
-            vitest_1.expect.objectContaining({
-                fromState: 'IN_CONCLUSION',
-                toState: 'WAITING_PAYMENT',
-                triggerEvent: 'COMPLETE_CONCLUSION',
-            }),
-        ]));
-        (0, vitest_1.expect)(visit?.turns.find(turn => turn.id === conclusionTurnId)?.progress?.status).toBe('COMPLETED');
-        (0, vitest_1.expect)(visit?.turns.find(turn => turn.id === conclusionTurnId)?.progress?.endedAt).not.toBeNull();
-        (0, vitest_1.expect)(visit?.invoice?.id).toBeTruthy();
-        (0, vitest_1.expect)(visit?.invoice?.status).toBe('UNPAID');
-        const invoicesResponse = await fetch(`${baseUrl}/invoices?visitId=${encodeURIComponent(visitId)}`);
-        const invoicesBody = await extractJson(invoicesResponse);
-        (0, vitest_1.expect)(invoicesResponse.status).toBe(200);
-        (0, vitest_1.expect)(invoicesBody.success).toBe(true);
-        (0, vitest_1.expect)(invoicesBody.data).toEqual(vitest_1.expect.arrayContaining([
-            vitest_1.expect.objectContaining({
+                invoiceId,
                 visitId,
                 status: 'UNPAID',
                 visit: vitest_1.expect.objectContaining({
@@ -359,8 +338,41 @@ const getVisitConclusionArtifacts = async (visitId) => {
                 }),
             }),
         ]));
-    }, 15000);
-    (0, vitest_1.it)('D-noCLS-1 completes an IN_EXAM visit without creating CLS artifacts', async () => {
+        const listedInvoice = body.data.find((invoice) => invoice.invoiceId === invoiceId);
+        (0, vitest_1.expect)(listedInvoice.items.length).toBeGreaterThan(0);
+        (0, vitest_1.expect)(listedInvoice.totalAmount).toBeGreaterThan(0);
+    }, 20000);
+    (0, vitest_1.it)('E2 pays an invoice and completes the visit', async () => {
+        const suffix = randomSuffix();
+        const { payload, visitId, invoiceId } = await prepareWaitingPaymentVisit(baseUrl, suffix);
+        cleanupTargets.push({
+            phone: payload.phone,
+            idNumber: payload.idNumber,
+            insuranceNumber: payload.insuranceNumber,
+        });
+        const payment = await payInvoice(baseUrl, invoiceId);
+        (0, vitest_1.expect)(payment.response.status).toBe(200);
+        (0, vitest_1.expect)(payment.body.success).toBe(true);
+        (0, vitest_1.expect)(payment.body.data.status).toBe('PAID');
+        (0, vitest_1.expect)(payment.body.data.paymentMethod).toBe('CASH');
+        (0, vitest_1.expect)(payment.body.data.paidAt).toBeTruthy();
+        (0, vitest_1.expect)(payment.body.data.paidAmount).toBe(payment.body.data.totalAmount);
+        (0, vitest_1.expect)(payment.body.data.visit.currentState).toBe('COMPLETED');
+        const visit = await getPaymentArtifacts(visitId);
+        (0, vitest_1.expect)(visit?.invoice?.id).toBe(invoiceId);
+        (0, vitest_1.expect)(visit?.invoice?.status).toBe('PAID');
+        (0, vitest_1.expect)(visit?.invoice?.paidAt).not.toBeNull();
+        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('COMPLETED');
+        (0, vitest_1.expect)(visit?.clinical?.completedAt).not.toBeNull();
+        (0, vitest_1.expect)(visit?.stateHistories).toEqual(vitest_1.expect.arrayContaining([
+            vitest_1.expect.objectContaining({
+                fromState: 'WAITING_PAYMENT',
+                toState: 'COMPLETED',
+                triggerEvent: 'PAYMENT_DONE',
+            }),
+        ]));
+    }, 20000);
+    (0, vitest_1.it)('E3 rejects payment when the visit is not WAITING_PAYMENT', async () => {
         const suffix = randomSuffix();
         const { payload, visitId } = await createWalkIn(baseUrl, suffix);
         cleanupTargets.push({
@@ -369,75 +381,55 @@ const getVisitConclusionArtifacts = async (visitId) => {
             insuranceNumber: payload.insuranceNumber,
         });
         await startExam(baseUrl, visitId);
-        const complete = await completeConclusion(baseUrl, visitId);
-        (0, vitest_1.expect)(complete.response.status).toBe(200);
-        (0, vitest_1.expect)(complete.body.success).toBe(true);
-        (0, vitest_1.expect)(complete.body.data.currentState).toBe('WAITING_PAYMENT');
-        const visit = await getVisitConclusionArtifacts(visitId);
-        const clinicalTurn = visit?.turns.find(turn => turn.turnType === 'CLINICAL_EXAM');
-        const conclusionTurns = visit?.turns.filter(turn => turn.turnType === 'CONCLUSION') ?? [];
-        const clsOrders = await prisma_1.prisma.cLSOrder.findMany({
-            where: { visitId },
-            include: { result: true },
-        });
-        (0, vitest_1.expect)(visit?.clinical?.id).toBeTruthy();
-        (0, vitest_1.expect)(visit?.clinical?.finalDiagnosis).toBe('Viem hong cap');
-        (0, vitest_1.expect)(visit?.clinical?.conclusion).toBe('Dieu tri ngoai tru');
-        (0, vitest_1.expect)(visit?.clinical?.treatmentPlan).toBe('Uong thuoc 5 ngay');
-        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('WAITING_PAYMENT');
-        (0, vitest_1.expect)(visit?.stateHistories).toEqual(vitest_1.expect.arrayContaining([
-            vitest_1.expect.objectContaining({
-                fromState: 'IN_EXAM',
-                toState: 'WAITING_PAYMENT',
-                triggerEvent: 'COMPLETE_EXAM_WITHOUT_CLS',
-            }),
-        ]));
-        (0, vitest_1.expect)(clinicalTurn?.progress?.status).toBe('COMPLETED');
-        (0, vitest_1.expect)(clinicalTurn?.progress?.endedAt).not.toBeNull();
-        (0, vitest_1.expect)(conclusionTurns).toHaveLength(0);
-        (0, vitest_1.expect)(clsOrders).toHaveLength(0);
-        (0, vitest_1.expect)(visit?.invoice?.id).toBeTruthy();
+        const invoiceId = await createInvoiceBeforePaymentState(visitId);
+        const payment = await payInvoice(baseUrl, invoiceId);
+        (0, vitest_1.expect)(payment.response.status).toBe(409);
+        (0, vitest_1.expect)(payment.body.success).toBe(false);
+        (0, vitest_1.expect)(payment.body.message).toMatch(/WAITING_PAYMENT/i);
+        const visit = await getPaymentArtifacts(visitId);
+        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('IN_EXAM');
         (0, vitest_1.expect)(visit?.invoice?.status).toBe('UNPAID');
-    }, 15000);
-    (0, vitest_1.it)('D4 rejects conclusion completion before IN_CONCLUSION', async () => {
+        (0, vitest_1.expect)(visit?.invoice?.paidAt).toBeNull();
+        (0, vitest_1.expect)(visit?.stateHistories.some(history => history.fromState === 'WAITING_PAYMENT' && history.toState === 'COMPLETED')).toBe(false);
+    }, 20000);
+    (0, vitest_1.it)('E4 rejects duplicate payment without duplicate invoice or history', async () => {
         const suffix = randomSuffix();
-        const { payload, visitId } = await prepareWaitingConclusionVisit(baseUrl, suffix);
+        const { payload, visitId, invoiceId } = await prepareWaitingPaymentVisit(baseUrl, suffix);
         cleanupTargets.push({
             phone: payload.phone,
             idNumber: payload.idNumber,
             insuranceNumber: payload.insuranceNumber,
         });
-        const complete = await completeConclusion(baseUrl, visitId);
-        (0, vitest_1.expect)(complete.response.status).toBe(409);
-        (0, vitest_1.expect)(complete.body.success).toBe(false);
-        (0, vitest_1.expect)(complete.body.message).toMatch(/IN_CONCLUSION/i);
-        const visit = await getVisitConclusionArtifacts(visitId);
-        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('WAITING_CONCLUSION');
-        (0, vitest_1.expect)(visit?.clinical?.finalDiagnosis).toBeNull();
-        (0, vitest_1.expect)(visit?.invoice).toBeNull();
-        (0, vitest_1.expect)(visit?.stateHistories.some(history => history.fromState === 'IN_CONCLUSION' && history.toState === 'WAITING_PAYMENT')).toBe(false);
-    }, 15000);
-    (0, vitest_1.it)('D5 rejects duplicate conclusion completion without duplicate history or invoice', async () => {
-        const suffix = randomSuffix();
-        const { payload, visitId, conclusionTurnId } = await prepareWaitingConclusionVisit(baseUrl, suffix);
-        cleanupTargets.push({
-            phone: payload.phone,
-            idNumber: payload.idNumber,
-            insuranceNumber: payload.insuranceNumber,
-        });
-        const start = await startConclusion(baseUrl, conclusionTurnId);
-        (0, vitest_1.expect)(start.response.status).toBe(200);
-        const firstComplete = await completeConclusion(baseUrl, visitId);
-        (0, vitest_1.expect)(firstComplete.response.status).toBe(200);
-        const duplicateComplete = await completeConclusion(baseUrl, visitId);
-        (0, vitest_1.expect)(duplicateComplete.response.status).toBe(409);
-        (0, vitest_1.expect)(duplicateComplete.body.success).toBe(false);
-        const visit = await getVisitConclusionArtifacts(visitId);
-        const paymentHistories = visit?.stateHistories.filter(history => history.fromState === 'IN_CONCLUSION' && history.toState === 'WAITING_PAYMENT');
+        const firstPayment = await payInvoice(baseUrl, invoiceId);
+        (0, vitest_1.expect)(firstPayment.response.status).toBe(200);
+        const duplicatePayment = await payInvoice(baseUrl, invoiceId);
+        (0, vitest_1.expect)(duplicatePayment.response.status).toBe(409);
+        (0, vitest_1.expect)(duplicatePayment.body.success).toBe(false);
+        const visit = await getPaymentArtifacts(visitId);
         const invoices = await prisma_1.prisma.invoice.findMany({ where: { visitId } });
-        (0, vitest_1.expect)(paymentHistories).toHaveLength(1);
+        const paymentHistories = visit?.stateHistories.filter(history => history.fromState === 'WAITING_PAYMENT' && history.toState === 'COMPLETED');
         (0, vitest_1.expect)(invoices).toHaveLength(1);
+        (0, vitest_1.expect)(paymentHistories).toHaveLength(1);
+        (0, vitest_1.expect)(visit?.invoice?.id).toBe(invoiceId);
+        (0, vitest_1.expect)(visit?.invoice?.status).toBe('PAID');
+        (0, vitest_1.expect)(visit?.progress?.currentState).toBe('COMPLETED');
+    }, 20000);
+    (0, vitest_1.it)('E5 rejects payment for a missing invoice without changing the visit', async () => {
+        const suffix = randomSuffix();
+        const { payload, visitId, invoiceId } = await prepareWaitingPaymentVisit(baseUrl, suffix);
+        cleanupTargets.push({
+            phone: payload.phone,
+            idNumber: payload.idNumber,
+            insuranceNumber: payload.insuranceNumber,
+        });
+        const payment = await payInvoice(baseUrl, `missing-${invoiceId}`);
+        (0, vitest_1.expect)(payment.response.status).toBe(404);
+        (0, vitest_1.expect)(payment.body.success).toBe(false);
+        (0, vitest_1.expect)(payment.body.message).toMatch(/Invoice not found/i);
+        const visit = await getPaymentArtifacts(visitId);
+        (0, vitest_1.expect)(visit?.invoice?.id).toBe(invoiceId);
+        (0, vitest_1.expect)(visit?.invoice?.status).toBe('UNPAID');
         (0, vitest_1.expect)(visit?.progress?.currentState).toBe('WAITING_PAYMENT');
-        (0, vitest_1.expect)(visit?.turns.find(turn => turn.id === conclusionTurnId)?.progress?.status).toBe('COMPLETED');
-    }, 15000);
+        (0, vitest_1.expect)(visit?.stateHistories.some(history => history.fromState === 'WAITING_PAYMENT' && history.toState === 'COMPLETED')).toBe(false);
+    }, 20000);
 });

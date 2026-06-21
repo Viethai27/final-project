@@ -415,6 +415,51 @@ describe('Doctor conclusion workflow', () => {
     );
   }, 15000);
 
+  it('D-noCLS-1 completes an IN_EXAM visit without creating CLS artifacts', async () => {
+    const suffix = randomSuffix();
+    const { payload, visitId } = await createWalkIn(baseUrl, suffix);
+    cleanupTargets.push({
+      phone: payload.phone,
+      idNumber: payload.idNumber,
+      insuranceNumber: payload.insuranceNumber,
+    });
+    await startExam(baseUrl, visitId);
+
+    const complete = await completeConclusion(baseUrl, visitId);
+    expect(complete.response.status).toBe(200);
+    expect(complete.body.success).toBe(true);
+    expect(complete.body.data.currentState).toBe('WAITING_PAYMENT');
+
+    const visit = await getVisitConclusionArtifacts(visitId);
+    const clinicalTurn = visit?.turns.find(turn => turn.turnType === 'CLINICAL_EXAM');
+    const conclusionTurns = visit?.turns.filter(turn => turn.turnType === 'CONCLUSION') ?? [];
+    const clsOrders = await prisma.cLSOrder.findMany({
+      where: { visitId },
+      include: { result: true },
+    });
+
+    expect(visit?.clinical?.id).toBeTruthy();
+    expect(visit?.clinical?.finalDiagnosis).toBe('Viem hong cap');
+    expect(visit?.clinical?.conclusion).toBe('Dieu tri ngoai tru');
+    expect(visit?.clinical?.treatmentPlan).toBe('Uong thuoc 5 ngay');
+    expect(visit?.progress?.currentState).toBe('WAITING_PAYMENT');
+    expect(visit?.stateHistories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fromState: 'IN_EXAM',
+          toState: 'WAITING_PAYMENT',
+          triggerEvent: 'COMPLETE_EXAM_WITHOUT_CLS',
+        }),
+      ]),
+    );
+    expect(clinicalTurn?.progress?.status).toBe('COMPLETED');
+    expect(clinicalTurn?.progress?.endedAt).not.toBeNull();
+    expect(conclusionTurns).toHaveLength(0);
+    expect(clsOrders).toHaveLength(0);
+    expect(visit?.invoice?.id).toBeTruthy();
+    expect(visit?.invoice?.status).toBe('UNPAID');
+  }, 15000);
+
   it('D4 rejects conclusion completion before IN_CONCLUSION', async () => {
     const suffix = randomSuffix();
     const { payload, visitId } = await prepareWaitingConclusionVisit(baseUrl, suffix);

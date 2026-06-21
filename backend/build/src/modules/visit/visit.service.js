@@ -1416,8 +1416,11 @@ const concludeVisit = async (id, payload) => {
     if (!visit) {
         throw new http_error_1.AppError('Visit not found.', 404);
     }
-    if (visit.progress?.currentState !== 'IN_CONCLUSION') {
-        throw new http_error_1.AppError('Visit must be IN_CONCLUSION before conclusion.', 409);
+    const currentState = visit.progress?.currentState ?? null;
+    const isExamConclusion = currentState === 'IN_EXAM';
+    const isAfterClsConclusion = currentState === 'IN_CONCLUSION';
+    if (!isExamConclusion && !isAfterClsConclusion) {
+        throw new http_error_1.AppError('Visit must be IN_EXAM or IN_CONCLUSION before conclusion.', 409);
     }
     const now = new Date();
     await prisma_1.prisma.$transaction(async (tx) => {
@@ -1436,6 +1439,42 @@ const concludeVisit = async (id, payload) => {
                 note: true,
             },
         });
+        const clinicalExamTurnProgress = isExamConclusion
+            ? await tx.turnProgress.findFirst({
+                where: {
+                    status: 'IN_PROGRESS',
+                    turn: {
+                        visitId: id,
+                        turnType: 'CLINICAL_EXAM',
+                    },
+                },
+                select: {
+                    id: true,
+                    calledAt: true,
+                    startedAt: true,
+                    note: true,
+                    turn: {
+                        select: {
+                            queueItemId: true,
+                            queueItem: {
+                                select: {
+                                    initialPriorityScore: true,
+                                    status: {
+                                        select: {
+                                            status: true,
+                                            priorityScore: true,
+                                            calledAt: true,
+                                            servedAt: true,
+                                            isTimeout: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            })
+            : null;
         await tx.visitClinical.upsert({
             where: { visitId: id },
             create: {
@@ -1443,6 +1482,7 @@ const concludeVisit = async (id, payload) => {
                 finalDiagnosis: payload.finalDiagnosis.trim(),
                 conclusion: payload.conclusion.trim(),
                 treatmentPlan: payload.treatmentPlan?.trim() || null,
+                conclusionStartAt: isAfterClsConclusion ? undefined : null,
                 completedAt: now,
             },
             update: {
@@ -1466,6 +1506,62 @@ const concludeVisit = async (id, payload) => {
                 },
             });
         }
+        if (clinicalExamTurnProgress) {
+            await tx.turnProgress.update({
+                where: { id: clinicalExamTurnProgress.id },
+                data: {
+                    status: 'COMPLETED',
+                    endedAt: now,
+                    durationMinutes: Math.max(0, Math.round((now.getTime() -
+                        (clinicalExamTurnProgress.startedAt ?? clinicalExamTurnProgress.calledAt ?? now).getTime()) /
+                        60000)),
+                    note: payload.note ?? clinicalExamTurnProgress.note ?? null,
+                    updatedById: payload.updatedById ?? null,
+                },
+            });
+            const queueItemId = clinicalExamTurnProgress.turn.queueItemId;
+            if (queueItemId) {
+                const queueStatus = clinicalExamTurnProgress.turn.queueItem?.status;
+                await tx.queueItemStatus.upsert({
+                    where: { queueItemId },
+                    create: {
+                        queueItemId,
+                        status: 'DONE',
+                        priorityScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? 0,
+                        lastScoreUpdated: now,
+                        calledAt: queueStatus?.calledAt ?? clinicalExamTurnProgress.calledAt ?? now,
+                        servedAt: queueStatus?.servedAt ?? clinicalExamTurnProgress.startedAt ?? now,
+                        dequeuedAt: now,
+                        isTimeout: queueStatus?.isTimeout ?? false,
+                        updatedById: payload.updatedById ?? null,
+                    },
+                    update: {
+                        status: 'DONE',
+                        priorityScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? 0,
+                        lastScoreUpdated: now,
+                        calledAt: queueStatus?.calledAt ?? clinicalExamTurnProgress.calledAt ?? now,
+                        servedAt: queueStatus?.servedAt ?? clinicalExamTurnProgress.startedAt ?? now,
+                        dequeuedAt: now,
+                        isTimeout: queueStatus?.isTimeout ?? false,
+                        updatedById: payload.updatedById ?? null,
+                    },
+                });
+                await tx.queueItemHistory.create({
+                    data: {
+                        queueItemId,
+                        eventType: 'COMPLETE_EXAM_WITHOUT_CLS',
+                        fromStatus: queueStatus?.status,
+                        toStatus: 'DONE',
+                        fromScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? null,
+                        toScore: queueStatus?.priorityScore ?? clinicalExamTurnProgress.turn.queueItem?.initialPriorityScore ?? null,
+                        eventTime: now,
+                        triggeredBy: 'turn',
+                        triggeredByUserId: payload.updatedById ?? null,
+                        note: payload.note ?? payload.conclusion.trim(),
+                    },
+                });
+            }
+        }
         await tx.visitProgress.update({
             where: { visitId: id },
             data: {
@@ -1478,9 +1574,9 @@ const concludeVisit = async (id, payload) => {
         await tx.visitStateHistory.create({
             data: {
                 visitId: id,
-                fromState: 'IN_CONCLUSION',
+                fromState: currentState,
                 toState: 'WAITING_PAYMENT',
-                triggerEvent: 'COMPLETE_CONCLUSION',
+                triggerEvent: isExamConclusion ? 'COMPLETE_EXAM_WITHOUT_CLS' : 'COMPLETE_CONCLUSION',
                 triggeredById: payload.updatedById ?? null,
                 transitionedAt: now,
                 note: payload.note ?? payload.conclusion.trim(),

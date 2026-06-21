@@ -27,6 +27,7 @@ import { clsx } from 'clsx';
 import type { PatientStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
+import DoctorQueueWorkspace from '../components/doctor/DoctorQueueWorkspace';
 
 const TURN_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Chờ gọi',
@@ -1130,7 +1131,7 @@ export default function DoctorPage() {
   const fallbackView: DoctorView = user?.role === 'DOCTOR' ? 'overview' : 'queue';
   const view = (searchParams.get('view') ?? fallbackView) as DoctorView;
 
-  if (view === 'queue') return <DoctorTurnsPage pageTitle="Hàng đợi khám" />;
+  if (view === 'queue') return <DoctorQueueWorkspace pageTitle="Hàng đợi khám" />;
   if (view === 'patients') return <DoctorPatientsView />;
   if (view === 'results') return <DoctorResultsView />;
   if (view === 'schedule') return <DoctorScheduleView />;
