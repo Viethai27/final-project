@@ -14,8 +14,13 @@ const PRIORITY_CONFIG: Record<string, BadgeConfig> = {
   CHILD_UNDER_6: { label: 'Trẻ em < 6 tuổi', className: 'bg-pink-100 text-pink-700 border-pink-200', icon: <Baby size={11} /> },
   PREGNANT: { label: 'Phụ nữ có thai', className: 'bg-rose-100 text-rose-700 border-rose-200', icon: <HeartPulse size={11} /> },
   DISABLED: { label: 'Người khuyết tật', className: 'bg-blue-100 text-blue-700 border-blue-200', icon: <Accessibility size={11} /> },
+  HEAVY_DISABLED: { label: 'Khuyết tật nặng', className: 'bg-blue-100 text-blue-700 border-blue-200', icon: <Accessibility size={11} /> },
   ELDERLY_75PLUS: { label: 'Người >= 75 tuổi', className: 'bg-amber-100 text-amber-700 border-amber-200', icon: <Clock size={11} /> },
   VETERAN: { label: 'Người có công', className: 'bg-red-100 text-red-700 border-red-200', icon: <Award size={11} /> },
+  REVOLUTIONARY_CONTRIBUTOR: { label: 'Người có công', className: 'bg-red-100 text-red-700 border-red-200', icon: <Award size={11} /> },
+  APPOINTMENT: { label: 'Có lịch hẹn', className: 'bg-sky-100 text-sky-700 border-sky-200', icon: <Clock size={11} /> },
+  AFTER_CLS: { label: 'Quay lại sau CLS', className: 'bg-teal-100 text-teal-700 border-teal-200', icon: <Clock size={11} /> },
+  OTHER: { label: 'Ưu tiên khác', className: 'bg-gray-100 text-gray-600 border-gray-200', icon: <Clock size={11} /> },
   EMERGENCY: { label: 'Cấp cứu', className: 'bg-red-600 text-white border-red-600 animate-pulse', icon: <Siren size={11} /> },
 };
 
@@ -29,7 +34,7 @@ const LANE_CONFIG: Record<QueueLane, BadgeConfig> = {
   APPOINTMENT: { label: 'Đặt lịch', className: 'bg-sky-100 text-sky-700 border-sky-200' },
   PRIORITY: { label: 'Ưu tiên', className: 'bg-red-100 text-red-700 border-red-200' },
   NORMAL: { label: 'Thường', className: 'bg-gray-100 text-gray-600 border-gray-200' },
-  AFTER_CLS: { label: 'Sau CLS', className: 'bg-purple-100 text-purple-700 border-purple-200' },
+  AFTER_CLS: { label: 'Sau CLS', className: 'bg-teal-100 text-teal-700 border-teal-200' },
 };
 
 const UNKNOWN_LANE_CONFIG: BadgeConfig = {

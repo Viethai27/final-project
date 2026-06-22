@@ -19,13 +19,14 @@ type PatientIdentity = {
 };
 
 const randomSuffix = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+const uniqueDigits = (suffix: string, length: number) => suffix.replace(/\D/g, '').slice(-length).padStart(length, '0');
 
 const buildPatientPayload = (suffix: string) => ({
   fullName: `CLS Order Test ${suffix}`,
   gender: 'MALE',
   dateOfBirth: '1990-01-15',
-  phone: `09${suffix.slice(-8)}`,
-  idNumber: `079${suffix.slice(-9)}`,
+  phone: `070${uniqueDigits(suffix, 7)}`,
+  idNumber: `970${uniqueDigits(suffix, 9)}`,
   address: 'CLS order integration test address',
   insuranceNumber: `BHYT-CLS-${suffix}`,
   isDisabled: false,
@@ -140,7 +141,7 @@ const createWalkIn = async (baseUrl: string, suffix: string) => {
   });
   const body = await extractJson(response);
 
-  expect(response.status).toBe(201);
+  expect(response.status, body.message).toBe(201);
   expect(body.success).toBe(true);
 
   return { payload, visitId: body.data.visitId as string };

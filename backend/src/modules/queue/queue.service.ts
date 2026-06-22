@@ -2,9 +2,12 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../shared/http-error';
 import { type ListQueryParams } from '../../shared/list-query';
+import { startTurn } from '../turn/turn.service';
 
 const defaultActiveStatuses = new Set(['WAITING', 'CALLED', 'SERVING']);
 const queueStatuses = new Set(['WAITING', 'CALLED', 'SERVING', 'DONE', 'TIMEOUT', 'CANCELLED']);
+const queueLanes = new Set(['PRIORITY', 'APPOINTMENT', 'AFTER_CLS', 'NORMAL']);
+const terminalQueueStatuses = new Set(['DONE', 'TIMEOUT', 'CANCELLED']);
 const laneOrder = new Map([
   ['PRIORITY', 0],
   ['APPOINTMENT', 1],
@@ -380,6 +383,9 @@ const queueListSelect = {
     orderBy: [{ createdAt: 'desc' }],
     take: 1,
     select: {
+      id: true,
+      turnType: true,
+      timeoutThreshold: true,
       createdAt: true,
       room: {
         select: {
@@ -428,6 +434,38 @@ const queueListSelect = {
           endedAt: true,
           timeoutAt: true,
           durationMinutes: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.QueueItemSelect;
+
+const queueMutationSelect = {
+  id: true,
+  initialPriorityScore: true,
+  status: {
+    select: {
+      status: true,
+      priorityScore: true,
+      calledAt: true,
+      servedAt: true,
+      dequeuedAt: true,
+      isTimeout: true,
+    },
+  },
+  turns: {
+    orderBy: [{ createdAt: 'desc' }],
+    select: {
+      id: true,
+      progress: {
+        select: {
+          status: true,
+          calledAt: true,
+          startedAt: true,
+          endedAt: true,
+          timeoutAt: true,
+          durationMinutes: true,
+          note: true,
         },
       },
     },
@@ -640,9 +678,18 @@ const queueDetailSelect = {
   },
 } satisfies Prisma.QueueItemSelect;
 
-export const getQueueItems = async (query: ListQueryParams) => {
+export const getQueueItems = async (query: ListQueryParams & { lane?: string }) => {
   const where: Prisma.QueueItemWhereInput = {};
   const status = query.status?.toUpperCase();
+  const lane = query.lane?.toUpperCase();
+
+  if (lane && lane !== 'ALL') {
+    if (!queueLanes.has(lane)) {
+      throw new AppError('Invalid queue lane.', 400);
+    }
+
+    where.laneType = lane as any;
+  }
 
   if (status && status !== 'ALL' && queueStatuses.has(status)) {
     where.status = {
@@ -679,21 +726,13 @@ export const getQueueItems = async (query: ListQueryParams) => {
   });
 
   const sorted = items.sort((left, right) => {
-    const statusRank = (statusValue: string | undefined) => {
-      if (statusValue === 'WAITING') return 0;
-      if (statusValue === 'CALLED') return 1;
-      if (statusValue === 'SERVING') return 2;
-      if (statusValue === 'DONE') return 3;
-      if (statusValue === 'TIMEOUT') return 4;
-      if (statusValue === 'CANCELLED') return 5;
-      return 6;
-    };
-
     const leftStatus = left.status?.status;
     const rightStatus = right.status?.status;
-    const byStatus = statusRank(leftStatus) - statusRank(rightStatus);
-    if (byStatus !== 0) {
-      return byStatus;
+    const byLifecycle =
+      Number(terminalQueueStatuses.has(leftStatus ?? '')) -
+      Number(terminalQueueStatuses.has(rightStatus ?? ''));
+    if (byLifecycle !== 0) {
+      return byLifecycle;
     }
 
     const byLane = (laneOrder.get(left.laneType) ?? 99) - (laneOrder.get(right.laneType) ?? 99);
@@ -706,11 +745,15 @@ export const getQueueItems = async (query: ListQueryParams) => {
       return byScore;
     }
 
-    if (query.sort === 'desc') {
-      return right.enqueuedAt.getTime() - left.enqueuedAt.getTime();
+    const byEnqueuedAt = left.enqueuedAt.getTime() - right.enqueuedAt.getTime();
+    if (byEnqueuedAt !== 0) {
+      return byEnqueuedAt;
     }
 
-    return left.enqueuedAt.getTime() - right.enqueuedAt.getTime();
+    return (left.visit.queueNumber ?? '').localeCompare(right.visit.queueNumber ?? '', undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   });
 
   const total = sorted.length;
@@ -734,4 +777,157 @@ export const getQueueItemById = async (id: string) => {
   }
 
   return mapQueueItem(queueItem);
+};
+
+type QueueActionPayload = {
+  updatedById?: string | null;
+  note?: string | null;
+};
+
+const queueActionRules = {
+  call: {
+    allowedStatuses: new Set(['WAITING']),
+    nextStatus: 'CALLED',
+    turnStatus: 'CALLED',
+    eventType: 'QUEUE_CALL',
+  },
+  timeout: {
+    allowedStatuses: new Set(['WAITING', 'CALLED']),
+    nextStatus: 'TIMEOUT',
+    turnStatus: 'TIMEOUT',
+    eventType: 'QUEUE_TIMEOUT',
+  },
+  cancel: {
+    allowedStatuses: new Set(['WAITING', 'CALLED']),
+    nextStatus: 'CANCELLED',
+    turnStatus: 'CANCELLED',
+    eventType: 'QUEUE_CANCEL',
+  },
+} as const;
+
+const mutateQueueItem = async (
+  id: string,
+  action: keyof typeof queueActionRules,
+  payload: QueueActionPayload,
+) => {
+  const queueItem = await prisma.queueItem.findUnique({
+    where: { id },
+    select: queueMutationSelect,
+  });
+
+  if (!queueItem) {
+    throw new AppError('Queue item not found.', 404);
+  }
+
+  const currentStatus = queueItem.status?.status ?? null;
+  const rule = queueActionRules[action];
+  if (!currentStatus || !rule.allowedStatuses.has(currentStatus as never)) {
+    throw new AppError(`Queue item cannot be ${action}ed in its current state.`, 409);
+  }
+
+  const activeTurn = queueItem.turns.find(turn =>
+    !turn.progress || ['PENDING', 'CALLED'].includes(turn.progress.status),
+  );
+  if (activeTurn?.progress && !['PENDING', 'CALLED'].includes(activeTurn.progress.status)) {
+    throw new AppError('Linked turn cannot transition with this queue action.', 409);
+  }
+
+  const now = new Date();
+  const score = queueItem.status?.priorityScore ?? queueItem.initialPriorityScore;
+
+  await prisma.$transaction(async tx => {
+    await tx.queueItemStatus.update({
+      where: { queueItemId: queueItem.id },
+      data: {
+        status: rule.nextStatus,
+        priorityScore: score,
+        lastScoreUpdated: now,
+        calledAt: action === 'call' ? now : queueItem.status?.calledAt ?? null,
+        servedAt: queueItem.status?.servedAt ?? null,
+        dequeuedAt: action === 'timeout' || action === 'cancel' ? now : null,
+        isTimeout: action === 'timeout',
+        updatedById: payload.updatedById ?? null,
+      },
+    });
+
+    if (activeTurn) {
+      const progress = activeTurn.progress;
+      await tx.turnProgress.upsert({
+        where: { turnId: activeTurn.id },
+        create: {
+          turnId: activeTurn.id,
+          status: rule.turnStatus,
+          calledAt: action === 'call' ? now : progress?.calledAt ?? queueItem.status?.calledAt ?? null,
+          startedAt: progress?.startedAt ?? null,
+          endedAt: action === 'timeout' || action === 'cancel' ? now : null,
+          timeoutAt: action === 'timeout' ? now : progress?.timeoutAt ?? null,
+          durationMinutes: progress?.durationMinutes ?? null,
+          note: payload.note ?? progress?.note ?? null,
+          updatedById: payload.updatedById ?? null,
+        },
+        update: {
+          status: rule.turnStatus,
+          calledAt: action === 'call' ? now : progress?.calledAt ?? queueItem.status?.calledAt ?? null,
+          startedAt: progress?.startedAt ?? null,
+          endedAt: action === 'timeout' || action === 'cancel' ? now : progress?.endedAt ?? null,
+          timeoutAt: action === 'timeout' ? now : progress?.timeoutAt ?? null,
+          durationMinutes: progress?.durationMinutes ?? null,
+          note: payload.note ?? progress?.note ?? null,
+          updatedById: payload.updatedById ?? null,
+        },
+      });
+    }
+
+    await tx.queueItemHistory.create({
+      data: {
+        queueItemId: queueItem.id,
+        eventType: rule.eventType,
+        fromStatus: currentStatus,
+        toStatus: rule.nextStatus,
+        fromScore: score,
+        toScore: score,
+        eventTime: now,
+        triggeredBy: 'queue',
+        triggeredByUserId: payload.updatedById ?? null,
+        note: payload.note ?? null,
+      },
+    });
+  });
+
+  return getQueueItemById(id);
+};
+
+export const callQueueItem = (id: string, payload: QueueActionPayload = {}) =>
+  mutateQueueItem(id, 'call', payload);
+
+export const timeoutQueueItem = (id: string, payload: QueueActionPayload = {}) =>
+  mutateQueueItem(id, 'timeout', payload);
+
+export const cancelQueueItem = (id: string, payload: QueueActionPayload = {}) =>
+  mutateQueueItem(id, 'cancel', payload);
+
+export const startQueueItem = async (id: string, payload: QueueActionPayload = {}) => {
+  const queueItem = await prisma.queueItem.findUnique({
+    where: { id },
+    select: queueMutationSelect,
+  });
+
+  if (!queueItem) {
+    throw new AppError('Queue item not found.', 404);
+  }
+
+  const currentStatus = queueItem.status?.status ?? null;
+  if (!currentStatus || !['WAITING', 'CALLED'].includes(currentStatus)) {
+    throw new AppError('Queue item cannot be started in its current state.', 409);
+  }
+
+  const turn = queueItem.turns.find(candidate =>
+    !candidate.progress || ['PENDING', 'CALLED'].includes(candidate.progress.status),
+  );
+  if (!turn) {
+    throw new AppError('Queue item does not have a startable turn.', 409);
+  }
+
+  await startTurn(turn.id, payload);
+  return getQueueItemById(id);
 };

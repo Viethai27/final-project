@@ -19,8 +19,13 @@ export type PriorityReason =
   | 'CHILD_UNDER_6'
   | 'PREGNANT'
   | 'DISABLED'
+  | 'HEAVY_DISABLED'
   | 'ELDERLY_75PLUS'
   | 'VETERAN'
+  | 'REVOLUTIONARY_CONTRIBUTOR'
+  | 'AFTER_CLS'
+  | 'APPOINTMENT'
+  | 'OTHER'
   | 'EMERGENCY';
 
 export interface Patient {
