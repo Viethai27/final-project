@@ -7,6 +7,7 @@ import {
   approveAppointment,
   checkInAppointment,
   createAppointmentBooking,
+  getAvailableAppointmentSlots,
   listAppointments,
   rejectAppointment,
 } from './appointment.service';
@@ -36,6 +37,15 @@ const readAppointmentId = (req: Parameters<RequestHandler>[0]) => {
   }
 
   return appointmentId;
+};
+
+const readOptionalNumber = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
 export const createAppointmentHandler: RequestHandler = asyncHandler(async (req, res) => {
@@ -87,6 +97,28 @@ export const listAppointmentsHandler: RequestHandler = asyncHandler(async (req, 
   });
 
   sendPaginatedSuccess(res, items, buildPagination(total, query.page, query.limit));
+});
+
+export const getAvailableAppointmentSlotsHandler: RequestHandler = asyncHandler(async (req, res) => {
+  const date = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+  const doctorId = typeof req.query.doctorId === 'string' ? req.query.doctorId.trim() || null : null;
+  const departmentId = typeof req.query.departmentId === 'string' ? req.query.departmentId.trim() || null : null;
+  const serviceId = typeof req.query.serviceId === 'string' ? req.query.serviceId.trim() || null : null;
+  const slotMinutes = readOptionalNumber(req.query.slotMinutes);
+
+  if (!date) {
+    throw new AppError('Date is required.', 400);
+  }
+
+  const result = await getAvailableAppointmentSlots({
+    date,
+    doctorId,
+    departmentId,
+    serviceId,
+    slotMinutes: slotMinutes ?? undefined,
+  });
+
+  sendSuccess(res, result);
 });
 
 export const approveAppointmentHandler: RequestHandler = asyncHandler(async (req, res) => {

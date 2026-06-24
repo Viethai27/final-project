@@ -161,6 +161,22 @@ export interface AppointmentSummaryDto {
   } | null;
 }
 
+export interface AppointmentAvailableSlotDto {
+  startTime: string;
+  endTime: string;
+  available: boolean;
+  reason?: string | null;
+  doctorId: string;
+  roomId: string;
+  scheduleId: string;
+}
+
+export interface AppointmentAvailableSlotsResultDto {
+  date: string;
+  doctorId: string | null;
+  slots: AppointmentAvailableSlotDto[];
+}
+
 export interface VisitListItemDto {
   visitId: string;
   queueNumber: string;

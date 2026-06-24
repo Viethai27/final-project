@@ -188,6 +188,24 @@ const mapAppointment = (appointment: any) => ({
 
 const deriveShift = (appointmentTime: Date) => (appointmentTime.getHours() < 12 ? 'AM' : 'PM');
 
+const parseTimeToMinutes = (value: string) => {
+  const [hoursText, minutesText] = value.split(':');
+  const hours = Number.parseInt(hoursText ?? '', 10);
+  const minutes = Number.parseInt(minutesText ?? '', 10);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    throw new AppError('Giờ làm việc không hợp lệ.', 400);
+  }
+
+  return hours * 60 + minutes;
+};
+
+const formatMinutesToTime = (minutes: number) => {
+  const hours = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mins = String(minutes % 60).padStart(2, '0');
+  return `${hours}:${mins}`;
+};
+
 const resolveRoom = async (
   tx: Prisma.TransactionClient,
   input: {
@@ -580,6 +598,94 @@ export const listAppointments = async (query: ListQueryParams & { date?: string 
   return {
     items: items.map(mapAppointmentListItem),
     total,
+  };
+};
+
+export const getAvailableAppointmentSlots = async (input: {
+  date: string;
+  doctorId?: string | null;
+  departmentId?: string | null;
+  serviceId?: string | null;
+  slotMinutes?: number;
+}) => {
+  const date = parseDate(input.date, 'Ngày hẹn không hợp lệ.');
+  const today = normalizeDateOnly(new Date());
+  if (date.getTime() <= today.getTime()) {
+    throw new AppError('Chỉ được lấy slot từ ngày mai trở đi.', 400);
+  }
+
+  const slotMinutes = input.slotMinutes && input.slotMinutes > 0 ? input.slotMinutes : 30;
+  const workSchedules = await prisma.workSchedule.findMany({
+    where: {
+      isActive: true,
+      workDate: normalizeDateOnly(date),
+      ...(input.doctorId ? { doctorId: input.doctorId } : {}),
+      ...(input.departmentId ? { room: { departmentId: input.departmentId } } : {}),
+    },
+    select: {
+      id: true,
+      doctorId: true,
+      roomId: true,
+      startTime: true,
+      endTime: true,
+      maxPatients: true,
+      appointments: {
+        where: {
+          status: { in: Array.from(appointmentStatuses) as any },
+        },
+        select: {
+          appointmentTime: true,
+          roomId: true,
+          doctorId: true,
+        },
+      },
+      doctor: {
+        select: { id: true, name: true },
+      },
+      room: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  const slots = workSchedules.flatMap(schedule => {
+    const startMinutes = parseTimeToMinutes(schedule.startTime);
+    const endMinutes = parseTimeToMinutes(schedule.endTime);
+    const occupied = new Set(
+      schedule.appointments.map(item => `${item.appointmentTime.getHours()}:${item.appointmentTime.getMinutes()}`),
+    );
+    const generated: Array<{
+      startTime: string;
+      endTime: string;
+      available: boolean;
+      reason?: string | null;
+      doctorId: string;
+      roomId: string;
+      scheduleId: string;
+    }> = [];
+
+    for (let minutes = startMinutes; minutes + slotMinutes <= endMinutes; minutes += slotMinutes) {
+      const startTime = formatMinutesToTime(minutes);
+      const endTime = formatMinutesToTime(minutes + slotMinutes);
+      const available = !occupied.has(`${Math.floor(minutes / 60)}:${minutes % 60}`);
+      generated.push({
+        startTime,
+        endTime,
+        available,
+        reason: available ? null : 'Đã có lịch hẹn.',
+        doctorId: schedule.doctorId,
+        roomId: schedule.roomId,
+        scheduleId: schedule.id,
+      });
+    }
+
+    return generated;
+  });
+
+  return {
+    date: normalizeDateOnly(date).toISOString(),
+    doctorId: input.doctorId ?? null,
+    slots: slots.filter(slot => slot.available),
   };
 };
 

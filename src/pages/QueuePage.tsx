@@ -3,9 +3,11 @@ import { Ban, Clock3, Filter, Loader2, Phone, Play, Search, XCircle } from 'luci
 import { clsx } from 'clsx';
 import Layout from '../components/layout/Layout';
 import { ErrorState, EmptyState, LoadingState, PaginationBar } from '../components/common/PageState';
+import { ToastContainer } from '../components/common/ToastContainer';
 import { LaneBadge, PriorityBadge } from '../components/ui/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
 import { formatDateTime } from '../lib/format';
+import { getToastMessage, useToastNotifications } from '../hooks/useToastNotifications';
 import type { ApiPagination, QueueItemSummaryDto } from '../services/backend-types';
 import { queueApi, type QueueAction, type QueueLaneFilter } from '../services/queueApi';
 
@@ -170,6 +172,7 @@ function QueueRow({
 
 export default function QueuePage() {
   const { user } = useAuth();
+  const { toasts, addToast, removeToast } = useToastNotifications();
   const [items, setItems] = useState<QueueItemSummaryDto[]>([]);
   const [pagination, setPagination] = useState<ApiPagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,7 +191,6 @@ export default function QueuePage() {
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setError('');
-
     try {
       const response = await queueApi.list({
         page,
@@ -201,11 +203,12 @@ export default function QueuePage() {
       setItems(response.data);
       setPagination(response.pagination ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không tải được hàng đợi.');
+      const message = getToastMessage(err, 'Không tải được hàng đợi.');
+      setError(message);
     } finally {
       setLoading(false);
     }
-  }, [lane, page, search, status]);
+  }, [addToast, lane, page, search, status]);
 
   useEffect(() => {
     void loadQueue();
@@ -215,20 +218,26 @@ export default function QueuePage() {
     setPendingAction({ queueItemId: item.queueItemId, action });
     setActionError('');
     setSuccessMessage('');
-
     try {
       await queueApi[action](item.queueItemId, {
         updatedById: user?.id ?? null,
         note: ACTION_LABELS[action] + ' từ QueuePage',
       });
       setSuccessMessage(ACTION_LABELS[action] + ' thành công cho ' + item.patient.fullName + '.');
+      addToast({
+        type: 'success',
+        action: `${ACTION_LABELS[action]} queue`,
+        message: `${ACTION_LABELS[action]} thành công cho ${item.patient.fullName}.`,
+      });
       await loadQueue();
     } catch (err) {
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : 'Không thể ' + ACTION_LABELS[action].toLowerCase() + ' bệnh nhân.',
-      );
+      const message = getToastMessage(err, 'Không thể ' + ACTION_LABELS[action].toLowerCase() + ' bệnh nhân.');
+      setActionError(message);
+      addToast({
+        type: 'error',
+        action: `${ACTION_LABELS[action]} queue`,
+        message,
+      });
     } finally {
       setPendingAction(null);
     }
@@ -304,6 +313,8 @@ export default function QueuePage() {
             {actionError}
           </div>
         )}
+
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
         {loading ? (
           <LoadingState label="Đang tải hàng đợi thật từ backend..." />
